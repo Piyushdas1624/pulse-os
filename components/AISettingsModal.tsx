@@ -123,7 +123,7 @@ export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProp
         is_key_valid: false,
         validation_error: errorText,
       });
-    } fontally {
+    } finally {
       setIsValidating(false);
     }
   };
