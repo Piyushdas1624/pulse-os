@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { usePulseStore } from "@/lib/store/usePulseStore";
-import { GeminiModelInfo, AIProviderMode, AIBudgetMode, AIProviderType } from "@/lib/types/pulse";
-import { X, Key, Cpu, ShieldCheck, Sparkles, CheckCircle2, AlertCircle, RefreshCw, Play, DollarSign, Activity, Layers, Server, Table as TableIcon } from "lucide-react";
+import { GeminiModelInfo, AIProviderType } from "@/lib/types/pulse";
+import { applyProviderConfig } from "@/lib/ai/providerState";
+import { X, Key, Cpu, ShieldCheck, Sparkles, CheckCircle2, AlertCircle, RefreshCw, Play, Server, Table as TableIcon, Layers } from "lucide-react";
 
 interface AISettingsModalProps {
   isOpen: boolean;
@@ -11,19 +12,21 @@ interface AISettingsModalProps {
 }
 
 export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProps) {
-  const { governor, setAIBudgetMode } = usePulseStore();
+  const governor = usePulseStore((s) => s.governor);
+  const setAIBudgetMode = usePulseStore((s) => s.setAIBudgetMode);
 
   const [activeTab, setActiveTab] = useState<"general" | "models" | "comparison" | "playground">("general");
-  const [providerType, setProviderType] = useState<AIProviderType>("gemini");
-  const [providerMode, setProviderMode] = useState<AIProviderMode>("demo");
-  const [personalApiKey, setPersonalApiKey] = useState("");
-  const [selectedModel, setSelectedModel] = useState("gemini-3.6-flash");
+  const [providerType, setProviderType] = useState<AIProviderType>(governor.provider_type || "gemini");
+  const [draftApiKey, setDraftApiKey] = useState(governor.personal_api_key || "");
+  const [selectedModel, setSelectedModel] = useState(governor.selected_model || "gemini-3.6-flash");
   const [models, setModels] = useState<GeminiModelInfo[]>([]);
 
   const [isValidating, setIsValidating] = useState(false);
-  const [validationStatus, setValidationStatus] = useState<"idle" | "success" | "error">("idle");
-  const [validationErrorMsg, setValidationErrorMsg] = useState<string | null>(null);
-  const [latencyMs, setLatencyMs] = useState<number | null>(241);
+  const [validationStatus, setValidationStatus] = useState<"idle" | "success" | "error">(
+    governor.is_key_valid ? "success" : governor.validation_error ? "error" : "idle"
+  );
+  const [validationErrorMsg, setValidationErrorMsg] = useState<string | null>(governor.validation_error || null);
+  const [latencyMs, setLatencyMs] = useState<number | null>(governor.avg_latency_ms || 241);
 
   // Playground state
   const [playgroundPrompt, setPlaygroundPrompt] = useState("Analyze kitchen load on Station A Grill and recommend patty batching.");
@@ -31,17 +34,7 @@ export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProp
   const [isRunningPlayground, setIsRunningPlayground] = useState(false);
 
   useEffect(() => {
-    const savedKey = localStorage.getItem("pulse_personal_api_key");
-    const savedMode = localStorage.getItem("pulse_provider_mode") as AIProviderMode;
-    const savedModel = localStorage.getItem("pulse_selected_model");
-    const savedProvider = localStorage.getItem("pulse_provider_type") as AIProviderType;
-
-    if (savedKey) setPersonalApiKey(savedKey);
-    if (savedMode) setProviderMode(savedMode);
-    if (savedModel) setSelectedModel(savedModel);
-    if (savedProvider) setProviderType(savedProvider);
-
-    fetchModels(savedKey || "");
+    fetchModels(draftApiKey);
   }, []);
 
   const fetchModels = async (key: string) => {
@@ -60,21 +53,22 @@ export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProp
     }
   };
 
-  const handleProviderSelect = (type: AIProviderType) => {
+  const handleProviderSelect = async (type: AIProviderType) => {
     setProviderType(type);
     setValidationStatus("idle");
     setValidationErrorMsg(null);
-    localStorage.setItem("pulse_provider_type", type);
 
-    if (type === "openai") {
-      setSelectedModel("gpt-4o");
-    } else if (type === "anthropic") {
-      setSelectedModel("claude-3-5-sonnet");
-    } else if (type === "openrouter") {
-      setSelectedModel("meta-llama/llama-3.3-70b-instruct");
-    } else {
-      setSelectedModel("gemini-3.6-flash");
-    }
+    let defaultMod = "gemini-3.6-flash";
+    if (type === "openai") defaultMod = "gpt-4o";
+    else if (type === "anthropic") defaultMod = "claude-3-5-sonnet";
+    else if (type === "openrouter") defaultMod = "meta-llama/llama-3.3-70b-instruct";
+
+    setSelectedModel(defaultMod);
+    await applyProviderConfig({ provider_type: type, selected_model: defaultMod });
+  };
+
+  const handleModeSelect = async (mode: "demo" | "personal" | "env") => {
+    await applyProviderConfig({ provider_mode: mode });
   };
 
   const handleValidateKey = async () => {
@@ -89,7 +83,7 @@ export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProp
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "validate_key",
-          userApiKey: personalApiKey,
+          userApiKey: draftApiKey,
           providerType,
         }),
       });
@@ -100,28 +94,45 @@ export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProp
         setValidationStatus("success");
         setLatencyMs(elapsed);
         if (data.models) setModels(data.models);
-        localStorage.setItem("pulse_personal_api_key", personalApiKey);
-        localStorage.setItem("pulse_provider_mode", "personal");
-        setProviderMode("personal");
+
+        await applyProviderConfig({
+          provider_mode: "personal",
+          provider_type: providerType,
+          personal_api_key: draftApiKey.trim(),
+          is_key_valid: true,
+          validation_error: undefined,
+          is_offline_fallback: false,
+          avg_latency_ms: elapsed,
+        });
       } else {
+        const errorText = data.error || "401 Unauthorized: Invalid API key";
         setValidationStatus("error");
-        setValidationErrorMsg(data.error || "401 Unauthorized: Invalid API key");
+        setValidationErrorMsg(errorText);
+
+        await applyProviderConfig({
+          is_key_valid: false,
+          validation_error: errorText,
+        });
       }
     } catch (err: any) {
+      const errorText = "Connection error validating key.";
       setValidationStatus("error");
-      setValidationErrorMsg("Connection error validating key.");
-    } finally {
+      setValidationErrorMsg(errorText);
+
+      await applyProviderConfig({
+        is_key_valid: false,
+        validation_error: errorText,
+      });
+    } fontally {
       setIsValidating(false);
     }
   };
 
-  const handleSaveSettings = () => {
-    localStorage.setItem("pulse_provider_type", providerType);
-    localStorage.setItem("pulse_provider_mode", providerMode);
-    localStorage.setItem("pulse_selected_model", selectedModel);
-    if (personalApiKey) {
-      localStorage.setItem("pulse_personal_api_key", personalApiKey);
-    }
+  const handleSaveSettings = async () => {
+    await applyProviderConfig({
+      provider_type: providerType,
+      selected_model: selectedModel,
+    });
     onClose();
   };
 
@@ -137,9 +148,9 @@ export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProp
         body: JSON.stringify({
           action: "run_playground",
           userPrompt: playgroundPrompt,
-          userApiKey: personalApiKey,
+          userApiKey: draftApiKey,
           selectedModel,
-          providerMode,
+          providerMode: governor.provider_mode,
         }),
       });
       const data = await res.json();
@@ -181,17 +192,21 @@ export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProp
               PulseOS AI Infrastructure Manager
               <span
                 className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono border ${
-                  validationStatus === "error"
-                    ? "bg-pulse-rose/20 text-pulse-rose border-pulse-rose/30"
-                    : "bg-pulse-emerald/20 text-pulse-emerald border-pulse-emerald/30"
+                  governor.is_key_valid
+                    ? "bg-pulse-emerald/20 text-pulse-emerald border-pulse-emerald/30"
+                    : "bg-pulse-amber/20 text-pulse-amber border-pulse-amber/30"
                 }`}
               >
                 <span
                   className={`w-1.5 h-1.5 rounded-full ${
-                    validationStatus === "error" ? "bg-pulse-rose" : "bg-pulse-emerald animate-ping"
+                    governor.is_key_valid ? "bg-pulse-emerald animate-ping" : "bg-pulse-amber"
                   }`}
                 />
-                {validationStatus === "error" ? "❌ Disconnected" : "🟢 Connected"}
+                {governor.provider_mode === "demo"
+                  ? "🟡 Demo Mode"
+                  : governor.is_key_valid
+                  ? "🟢 Connected"
+                  : "❌ Disconnected"}
               </span>
             </h2>
           </div>
@@ -216,7 +231,7 @@ export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProp
           </div>
           <div>
             <span className="text-slate-500 block text-[10px]">TODAY SPEND</span>
-            <span className="text-pulse-emerald font-bold">₹8.21 / ₹50</span>
+            <span className="text-pulse-emerald font-bold">₹{governor.today_ai_cost_inr || 0} / ₹{governor.today_budget_inr || 50}</span>
           </div>
           <div>
             <span className="text-slate-500 block text-[10px]">ACTIVE MODEL</span>
@@ -312,9 +327,9 @@ export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProp
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <button
-                    onClick={() => setProviderMode("demo")}
+                    onClick={() => handleModeSelect("demo")}
                     className={`p-3.5 rounded-xl border text-left transition-all font-mono ${
-                      providerMode === "demo"
+                      governor.provider_mode === "demo"
                         ? "bg-pulse-violet/20 border-pulse-violet text-white"
                         : "bg-obsidian-950/60 border-white/10 text-slate-400 hover:border-white/20"
                     }`}
@@ -326,23 +341,23 @@ export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProp
                   </button>
 
                   <button
-                    onClick={() => setProviderMode("personal")}
+                    onClick={() => handleModeSelect("personal")}
                     className={`p-3.5 rounded-xl border text-left transition-all font-mono ${
-                      providerMode === "personal"
+                      governor.provider_mode === "personal"
                         ? "bg-pulse-violet/20 border-pulse-violet text-white"
                         : "bg-obsidian-950/60 border-white/10 text-slate-400 hover:border-white/20"
                     }`}
                   >
                     <div className="font-bold text-sm text-pulse-cyan mb-1">Personal Key</div>
                     <div className="text-[10px] text-slate-400 leading-relaxed">
-                      Saved safely in browser localStorage.
+                      Saved safely in encrypted Web Crypto storage.
                     </div>
                   </button>
 
                   <button
-                    onClick={() => setProviderMode("env")}
+                    onClick={() => handleModeSelect("env")}
                     className={`p-3.5 rounded-xl border text-left transition-all font-mono ${
-                      providerMode === "env"
+                      governor.provider_mode === "env"
                         ? "bg-pulse-violet/20 border-pulse-violet text-white"
                         : "bg-obsidian-950/60 border-white/10 text-slate-400 hover:border-white/20"
                     }`}
@@ -356,7 +371,7 @@ export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProp
               </div>
 
               {/* Personal API Key */}
-              {providerMode === "personal" && (
+              {governor.provider_mode === "personal" && (
                 <div className="p-4 rounded-xl bg-obsidian-950/80 border border-white/10 space-y-3 font-mono">
                   <label className="text-slate-300 font-bold text-xs flex items-center justify-between">
                     <span>{providerLabel} API Key</span>
@@ -367,15 +382,15 @@ export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProp
                       <Key className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                       <input
                         type="password"
-                        value={personalApiKey}
-                        onChange={(e) => setPersonalApiKey(e.target.value)}
+                        value={draftApiKey}
+                        onChange={(e) => setDraftApiKey(e.target.value)}
                         placeholder={providerType === "gemini" ? "AIzaSy..." : "sk-..."}
                         className="w-full bg-obsidian-900 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-white text-xs focus:outline-none focus:border-pulse-violet"
                       />
                     </div>
                     <button
                       onClick={handleValidateKey}
-                      disabled={isValidating || !personalApiKey}
+                      disabled={isValidating || !draftApiKey}
                       className="px-4 py-2.5 bg-pulse-violet hover:bg-pulse-violet/90 text-white font-bold rounded-xl text-xs flex items-center space-x-1.5 disabled:opacity-50"
                     >
                       {isValidating ? (
@@ -442,14 +457,6 @@ export default function AISettingsModal({ isOpen, onClose }: AISettingsModalProp
                       <span>⚡ Speed: {"⭐".repeat(m.speedRating || 5)}</span>
                       <span>💰 Cost: {"⭐".repeat(m.costRating || 4)}</span>
                       <span>🧠 Quality: {"⭐".repeat(m.qualityRating || 5)}</span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-1.5 mt-2 font-mono text-[10px]">
-                      {(m.supportedCapabilities || ["Function Calling", "Structured Output"]).map((cap) => (
-                        <span key={cap} className="px-2 py-0.5 rounded bg-white/5 text-slate-300 border border-white/10">
-                          ✓ {cap}
-                        </span>
-                      ))}
                     </div>
                   </div>
                 ))}
