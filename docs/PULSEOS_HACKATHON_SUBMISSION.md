@@ -1,192 +1,243 @@
-# PulseOS — Vibeathon 6.0 Hackathon Submission & Slide Prompts 🎯
+# PulseOS — Vibeathon 6.0 Official Hackathon Submission & PPT Copy 🏆
 
-## 1. What PulseOS Code Does & How It Solves Restaurant Operational Chaos
-
-PulseOS is an **AI-powered Restaurant Operating Intelligence Platform**. Instead of acting like a passive point-of-sale (POS) terminal or an offline analytics dashboard, PulseOS treats restaurant operations like an **operating system CPU scheduler**:
-
-- **Live 2D Digital Twin Floor**: Maps active tables (`T1–T8`), dining room seats, order states (`Seated`, `Ordering`, `In Kitchen`, `Served`, `Needs Clearing`), and revenue exposure in real time.
-- **Kitchen CPU Batching Scheduler**: Automatically identifies concurrent order bottlenecks across tables (e.g., 5 Wagyu burgers ordered across Tables 2 & 5 within 6 minutes) and batches kitchen prep tasks to reduce ticket wait time by **18–25%**.
-- **Real-Time Predictive Inventory Alerts**: Monitors floor consumption rates against ingredient stock (e.g., Aged Truffle Cheese depleting in 38 minutes), warning managers **before** dishes are 86'd on active tickets.
-- **PulseAI Governor & Telemetry**: Multi-provider AI execution layer supporting **Google Gemini (Gemini 3.6 Flash / 2.5 Flash)**, **OpenAI (GPT-4o)**, **Anthropic (Claude 3.5 Sonnet)**, and **OpenRouter**. Provides real-time token spend tracking in INR (₹) and encrypted local key security (`AES-GCM`).
+> **Live Repository**: [Piyushdas1624/pulse-os](https://github.com/Piyushdas1624/pulse-os)  
+> **Recommended Live Deployment Platform**: **Vercel** (Step-by-step instructions below)
 
 ---
 
-## 2. Vibeathon 6.0 Official 6-Slide Prompts & Submission Form Text
+## 1. Official Vibeathon 6.0 Slide Content (Fully Populated & Ready to Paste)
 
 ### Slide 1 — Title Page
-**Prompt:**
 ```text
-You are writing the TITLE PAGE for a hackathon PPT.
-Project: PulseOS – AI-Powered Restaurant Operating Intelligence Platform.
+PROJECT TITLE: PulseOS – AI-Powered Restaurant Operating Intelligence Platform
+SUBTITLE: Real-Time Digital Twin Floor & Kitchen CPU Batching Engine
 
-Generate a concise, professional title-slide block containing:
-• Team Name: Codebenders
-• Team Leader Name: Piyush Das
-• College Name: Hackathon Submission
-• Year & Department: Computer Science & Engineering
-• Problem Statement / Project Title: PulseOS – AI-Powered Restaurant Operating Intelligence Platform
+TEAM DETAILS:
+• Team Leader: Piyush Das
+• Team Name: N/A (Solo Submission)
+• Institution: Siliguri Govt. Polytechnic
+• Department / Year: Computer Science & Technology (Final Year)
+• Track: AI / Operational Automation
 
-Tone: startup + hackathon.
-Keep it short enough to fit on one slide.
-Return only the final slide text (no explanations).
+TAGLINE: "Restaurants don't need more software. They need operating intelligence."
 ```
 
 ---
 
 ### Slide 2 — Current Problem
-**Prompt:**
 ```text
-Write the “CURRENT PROBLEM” slide for a hackathon PPT about PulseOS.
+CURRENT PROBLEM: Restaurant Operational Friction & Delayed Decision-Making
 
-Context:
-• Restaurants use multiple disconnected tools (POS, kitchen display, inventory sheets, staff coordination).
-• Managers react after delays happen.
-• Orders pile up, inventory shortages are noticed late, and table turnover slows down.
+1. Problem Overview:
+Modern restaurants run on fragmented, reactive software. POS systems track bills, kitchen displays list tickets chronologically, and inventory lives on spreadsheets. Managers only realize service is failing after customer complaints or missed sales occur.
 
-Generate 5 sections:
-1. Problem Overview (2–3 lines)
-2. Who Is Affected (bullet list)
-3. Current Challenges (4–6 bullets)
-4. Limitations of Existing Solutions (3–5 bullets)
-5. Real-World Impact (2–3 measurable business consequences)
+2. Who Is Affected:
+• Restaurant Managers & Floor Captains
+• Line Cooks & Head Chefs
+• Guests & Diners
+• Franchise Owners & Operations Executives
 
-Make it presentation-ready, concise, and non-technical enough for judges.
+3. Current Challenges:
+• Kitchen Bottlenecks: Independent tables ordering similar dishes causes repetitive prep cycles and pass congestion.
+• Stock Blind Spots: Ingredient shortages (e.g., Wagyu beef, truffle cheese) are discovered mid-service when orders fail.
+• Seating Inefficiencies: Table turnover lags due to lack of visibility into dining stage transitions.
+• Disconnected Tools: POS, Kitchen Display Systems (KDS), and inventory sheets operate in silos.
+
+4. Limitations of Existing Solutions:
+• Legacy POS systems report static past data, not live predictive insights.
+• Traditional KDS lists orders strictly by timestamp without smart dish batching.
+• Generic AI chatbots lack real-time context of active orders, kitchen load, or stock levels.
+
+5. Real-World Impact:
+• 20–30% increase in peak-hour guest wait times.
+• 15% revenue loss due to stockouts of high-margin menu items.
+• Lower table turnover rates and reduced customer retention.
 ```
 
 ---
 
 ### Slide 3 — Proposed Solution
-**Prompt:**
 ```text
-Write the “PROPOSED SOLUTION” slide for PulseOS.
+PROPOSED SOLUTION: PulseOS Operating Intelligence Platform
 
-Core idea:
-PulseOS is an AI-powered operational intelligence platform for restaurants. It provides a live Digital Twin floor map, a Kitchen CPU Scheduler that batches similar dishes, real-time inventory monitoring, and an Executive AI Audit that recommends actions before bottlenecks occur.
+1. Solution Overview:
+PulseOS treats restaurant operations like an operating system CPU scheduler. It unifies seating, order flow, kitchen preparation, and stock consumption into a live 2D Digital Twin with an automated AI Governor co-pilot.
 
-Generate these sections:
-1. Solution Overview (2–3 lines)
-2. How It Works (4 numbered steps)
-3. Key Features (5 bullets)
-4. Innovative Solution (1 short paragraph)
-5. Unique Value / Benefits (4 concise bullets)
+2. How It Works:
+[1] Customer QR Ordering → Guests order directly; tickets stream to central state.
+[2] 2D Digital Twin Floor → Live map tracks seat occupancy, order status, and open floor revenue.
+[3] Kitchen CPU Batching → Engine batches identical dishes across separate table tickets.
+[4] PulseAI Governor → Automated AI audit scans telemetry and recommends instant manager actions.
 
-Keep it concise, visually scannable, and suitable for a single PPT slide.
+3. Key Features:
+• Architectural 2D Digital Twin Floor Map (Circle 2-seaters, Square 4-seaters, Booths).
+• Kitchen CPU Batching Scheduler (groups concurrent dish prep tasks).
+• Predictive Inventory Consumption Alerts (warns before stock depletion).
+• PulseAI Governor & Multi-Provider Engine (Gemini 3.6 Flash, OpenAI, Anthropic, OpenRouter).
+• Local AES-GCM Encrypted Key Vault & Real-Time INR (₹) Spend Telemetry.
+
+4. Innovative Core:
+Instead of presenting passive charts, PulseOS applies operating system CPU scheduling concepts to food preparation—calculating prep delays, batching identical items, and prescribing exact intervention steps.
+
+5. Unique Benefits:
+• 18% reduction in kitchen ticket prep delays.
+• Zero surprise 86'd menu items during peak hours.
+• Instant executive visibility into revenue risk and bottleneck causes.
+• Zero setup friction with local client key encryption and browser rehydration.
 ```
 
 ---
 
 ### Slide 4 — Technical Approach
-**Prompt:**
 ```text
-Write the “TECHNICAL APPROACH” slide for PulseOS.
+TECHNICAL APPROACH: Modern Frontend & Multi-Provider AI Architecture
 
-Use this stack:
-• Next.js 15 (App Router)
-• React 19
-• TypeScript
-• Tailwind CSS
-• Zustand State Management
-• Google Gemini 3.6 Flash / Multi-Provider AI API (OpenAI, Anthropic, OpenRouter)
-• AES-GCM Web Crypto API Key Vault
+1. Technologies Used:
+• Frontend Core: Next.js 15 (App Router), React 19, TypeScript
+• Styling & Aesthetics: Tailwind CSS (Restrained Dark Obsidian Palette: #0B0F14)
+• State Management: Zustand (Centralized Store & LocalStorage Rehydration)
+• AI Execution Layer: Google Gemini API (Gemini 3.6 Flash / 2.5 Flash), OpenAI, Anthropic, OpenRouter
+• Key Security: AES-GCM Web Crypto API Vault
 
-Architecture:
-Customer QR Portal → Operations Command Center → AI Operations Center → PulseAI Governor Engine.
+2. Architecture Overview:
+[Guest QR Menu] ──► [Central Zustand Store] ──► [2D Digital Twin Floor Map]
+                             │
+                             ▼
+                 [Kitchen CPU Scheduler]
+                             │
+                             ▼
+              [PulseAI Governor API Route]
+     (Gemini 3.6 Flash / OpenAI / Anthropic Execution)
 
-Generate:
-1. Technologies Used
-2. Tools & Frameworks
-3. System Architecture (1 short paragraph)
-4. Methodology / Workflow (5-step flow)
-5. How the Idea Works (3–4 concise bullets)
+3. System Methodology:
+• Real-time state updates drive UI components without full page re-renders.
+• Snapshot payload (active orders, kitchen load %, stock levels) feeds the AI Governor.
+• Deterministic local rules fallback guarantees zero downtime when running offline.
 
-Keep the wording judge-friendly: technical enough to sound real, but not overloaded with jargon.
+4. How It Works Under the Hood:
+• Serverless Next.js Route (`/api/ai/health-scan`) handles multi-provider discovery and key verification.
+• Key vault encrypts user credentials locally in browser storage using AES-GCM.
+• Token cost engine translates input/output token usage into live INR (₹) expenditure.
 ```
 
 ---
 
 ### Slide 5 — Use Cases & Impact
-**Prompt:**
 ```text
-Write the “USE CASES & IMPACT” slide for PulseOS.
+USE CASES & MEASURABLE BUSINESS IMPACT
 
-Generate:
-1. Key Use Cases (4 bullets)
-2. Target Users / Beneficiaries (4 bullets)
-3. Real-World Applications (3 bullets)
-4. Expected Impact (4 bullets with percentages or operational outcomes)
-5. Measurable Outcomes (4 KPI-style metrics)
+1. Key Use Cases:
+• Peak-Hour Kitchen Optimization: Batching burger/pasta orders across Tables 2 & 5.
+• Pre-Emptive Stock Management: Alerting manager when Aged Truffle Cheese has 38 mins remaining.
+• Live Floor Coordination: Real-time table status tracking (Seated ➔ Ordering ➔ Served ➔ Clearing).
+• Operational Executive Audit: One-click AI health scan for restaurant general managers.
 
-Use realistic hackathon-safe estimates such as reduced wait time (-18%), improved kitchen throughput (+22%), lower food waste (-15%), and faster table turnover (+14%). Keep everything concise and presentation-ready.
+2. Target Beneficiaries:
+• Independent Fine Dining & Casual Restaurants
+• High-Volume Cloud Kitchens & QSR Chains
+• Restaurant General Managers & Head Chefs
+• Hospitality Operations Executives
+
+3. Expected Operational Impact:
+• Wait Time Reduction: -18% average guest wait time during peak rushes.
+• Kitchen Prep Throughput: +22% improvement in dishes served per hour.
+• Stockout Exposures: -15% reduction in wasted or unavailable menu items.
+• Table Turnover Boost: +14% faster table re-seating efficiency.
+
+4. Measurable KPI Outcomes:
+• Health Score Metric: Live 0–100 operational rating (e.g., 90/100 holding steady).
+• Open Floor Revenue Tracking: Live revenue exposure (e.g., ₹19,250 across active seats).
+• Revenue Upside Identified: Quantified profit recovery (e.g., +₹6,035 upside from batching).
 ```
 
 ---
 
 ### Slide 6 — Future Scope & Conclusion
-**Prompt:**
 ```text
-Write the “FUTURE SCOPE & CONCLUSION” slide for PulseOS.
+FUTURE SCOPE & CONCLUSION
 
-Generate:
-1. Future Enhancements (4 bullets)
-2. Integration Opportunities (3 bullets)
-3. Scalability & Expansion (3 bullets)
-4. Future Impact (1 short paragraph)
-5. Conclusion (2–3 strong closing lines for a hackathon pitch)
+1. Future Enhancements:
+• POS Hardware & Thermal Printer Integration (Epson/Star Micronics POS protocols).
+• Automated WhatsApp/SMS Staff Notifications for low stock and table delays.
+• Multi-Location Chain Operations Dashboard with cross-branch telemetry.
+• Computer Vision Table Occupancy Detection via overhead cameras.
 
-End with a memorable one-line tagline: "Restaurants don't need more software. They need operating intelligence."
+2. Scalability & Expansion:
+• Cloud-native serverless architecture scales seamlessly from 1 bistro to 500+ franchise outlets.
+• Multi-tenant database integration via Supabase / PostgreSQL.
 
-Tone: confident, investor-ready, and concise.
+3. Conclusion:
+PulseOS proves that restaurants don't need more complex software—they need operating intelligence. By applying CPU scheduling to kitchen operations and powering it with Gemini 3.6 Flash, PulseOS eliminates bottlenecks before guests notice them.
+
+CLOSING TAGLINE: "PulseOS: Transforming Restaurant Operations from Reactive Chaos to Predictive Intelligence."
 ```
 
 ---
 
-## 3. Submission Form Copy (Paste Ready)
+## 2. Submission Form Copies (Paste Ready)
 
-### Form Field 1: "What does your project do?" (Under 450 chars)
+### Question 1: "What does your project do?" *(379 / 450 characters)*
 > PulseOS is an AI-powered operating intelligence platform for restaurants. It pairs a live 2D Digital Twin floor map with a Kitchen CPU Scheduler that batches similar dish orders in real time. By synchronizing floor seating, inventory consumption, and kitchen load, PulseOS delivers automated AI recommendations that prevent service bottlenecks before they impact customer dining experiences.
 
 ---
 
-### Form Field 2: "What makes it unique?" (Under 450 chars)
+### Question 2: "What makes it unique?" *(409 / 450 characters)*
 > PulseOS unique innovation is treating kitchen order queues like an OS CPU scheduler — batching identical prep tasks across separate table tickets to cut wait times by 18%. Unlike static POS dashboards or generic AI chatbots, the PulseAI Governor acts as a live operational co-pilot, discovering model capabilities on the fly and monitoring token spend in rupees with encrypted key privacy.
 
 ---
 
-## 4. GitHub README & 2-Minute Demo Script Prompts
+## 3. Platform Recommendation: Deploy on Vercel 🚀
 
-### README Prompt (For Hackathon Repository)
-```text
-Create a complete GitHub README for a public hackathon submission.
+### Why Vercel instead of Render?
+1. **Built by Next.js Creators**: Native, first-class support for **Next.js 15 (App Router)** and API routes.
+2. **Zero Serverless Configuration**: Deploying to Render requires setting up a custom Node.js container or background worker. Vercel automatically deploys your app as a global edge/serverless project in **under 60 seconds**.
+3. **Free & Instant SSL/HTTPS**: Free `*.vercel.app` domain with automatic SSL certificate.
 
-Project: PulseOS – AI-Powered Restaurant Operating Intelligence Platform.
+---
 
-Include:
-• Project tagline: "Restaurants don't need more software. They need operating intelligence."
-• Problem statement & Solution overview
-• Demo flow & Features (P0/P1 breakdown)
-• Tech stack (Next.js 15, React 19, TypeScript, Tailwind CSS, Zustand, Google Gemini 3.6 Flash)
-• Architecture diagram & workflow
-• Local installation steps (`npm install`, `npm run dev`)
-• Environment variables setup (`GEMINI_API_KEY`)
-• Deployment guide (Vercel)
-• Team members & roles
-• Future scope & License
+### Step-by-Step Vercel Deployment Instructions
 
-Write it in polished GitHub Markdown suitable for a hackathon judge.
+#### Option A: Deploy via GitHub (Easiest & Recommended)
+1. Go to [vercel.com](https://vercel.com) and log in with your GitHub account.
+2. Click **"Add New..." ➔ "Project"**.
+3. Import your repository: **`Piyushdas1624/pulse-os`**.
+4. In **Framework Preset**, Vercel will automatically detect **Next.js**.
+5. (Optional) In **Environment Variables**, add:
+   - Name: `GEMINI_API_KEY`
+   - Value: `your_gemini_api_key_here`
+6. Click **Deploy**. Vercel will build and deploy your project live in ~45 seconds!
+
+#### Option B: Deploy via Command Line (Vercel CLI)
+Run the following commands in your terminal:
+
+```bash
+# 1. Install Vercel CLI globally
+npm install -g vercel
+
+# 2. Login to Vercel
+vercel login
+
+# 3. Deploy to production
+vercel --prod
 ```
 
 ---
 
-### 2-Minute Video Pitch Script Prompt
+## 4. 2-Minute Pitch Video Demo Script
+
 ```text
-Write a 2-minute hackathon demo video script for PulseOS.
+[0:00 - 0:20] HOOK & PROBLEM:
+"Hi judges! Restaurants face constant peak-hour chaos. POS systems log bills, kitchen displays list tickets chronologically, and managers only find out about kitchen delays after customers complain. Existing tools are reactive."
 
-Structure:
-0:00 - 0:20 | Hook & Problem (Kitchen delays, inventory blind spots)
-0:20 - 0:50 | Solution Overview & Live 2D Floor Plan Demo
-0:50 - 1:20 | Kitchen CPU Batching & Real-Time Stock Risk Warning
-1:20 - 1:45 | PulseAI Governor & Multi-Provider Telemetry (Gemini 3.6 Flash)
-1:45 - 2:00 | Business Impact & Closing Tagline
+[0:20 - 0:50] DIGITAL TWIN & KITCHEN CPU SCHEDULER:
+"Meet PulseOS. PulseOS treats restaurant operations like an operating system CPU scheduler. Here on our live 2D Digital Twin Floor, managers see real-time table states, seating capacity, and active revenue exposure. When 5 Wagyu burgers are ordered across separate tables, our Kitchen CPU Scheduler automatically batches prep tasks, cutting wait times by 18%."
 
-Keep it high-energy, confident, and focused on practical operational impact.
+[0:50 - 1:20] PREDICTIVE INVENTORY & PULSEAI GOVERNOR:
+"PulseOS doesn't wait for items to run out. Our inventory engine warns managers when stock like Aged Truffle Cheese will deplete in 38 minutes. With one click, the PulseAI Governor runs an executive audit, prescribing exact intervention steps."
+
+[1:20 - 1:45] MULTI-PROVIDER AI & SECURITY:
+"PulseOS supports Google Gemini 3.6 Flash, OpenAI, Anthropic, and OpenRouter with live model discovery, real-time token spend tracking in rupees, and local AES-GCM Web Crypto encryption."
+
+[1:45 - 2:00] CONCLUSION:
+"PulseOS turns reactive chaos into predictive intelligence. Restaurants don't need more software — they need operating intelligence. Thank you!"
 ```
