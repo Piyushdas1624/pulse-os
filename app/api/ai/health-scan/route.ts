@@ -44,7 +44,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const action = String(body.action ?? "");
+  let action = String(body.action ?? "");
+  if (!action && ("activeOrdersCount" in body || "kitchenLoad" in body || "tablesOccupied" in body || "lowInventory" in body)) {
+    action = "run_audit";
+  }
   if (!action) {
     return NextResponse.json(
       { success: false, error: 'Missing "action". Expected validate_key | fetch_models | run_playground | run_audit | run_chat.' },

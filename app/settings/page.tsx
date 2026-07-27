@@ -322,7 +322,7 @@ export default function SettingsPage() {
                 <Loader2 size={15} className="animate-spin" /> Discovering models…
               </div>
             ) : models.length > 0 ? (
-              <div className="flex flex-col gap-2">
+              <div className="max-h-[320px] overflow-y-auto pr-1 flex flex-col gap-2 custom-scrollbar">
                 {models.map((m) => {
                   const on = governor.selected_model === m.name;
                   return (
