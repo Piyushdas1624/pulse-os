@@ -1,159 +1,224 @@
 "use client";
 
 import { usePulseStore } from "@/lib/store/usePulseStore";
-import { Zap, Activity, CheckCircle, HelpCircle, ArrowRight, ShieldCheck, Sparkles, AlertTriangle, TrendingUp, Cpu } from "lucide-react";
+import {
+  Panel,
+  PanelHead,
+  Button,
+  Tag,
+  type Tone,
+  cx,
+} from "@/components/ui/primitives";
+import { isLiveProvider, activeModelLabel } from "@/lib/ai/providerState";
+import { ArrowRight, HelpCircle, AlertCircle, Loader2 } from "lucide-react";
+
+/**
+ * Executive audit card. Same design language as the rest of the app — no
+ * glass-panel, no neon, no emojis. Health/risk/opportunity/bottleneck are all
+ * computed from the live store; the audit itself goes through the real
+ * provider layer. last_error is surfaced inline so a failed scan is never
+ * silently idle again (errors.md 6.12).
+ */
+
+const RISK_TONE: Record<"LOW" | "MODERATE" | "HIGH", Tone> = {
+  LOW: "ok",
+  MODERATE: "busy",
+  HIGH: "risk",
+};
 
 export default function AIHealthScanCard() {
   const {
+    governor,
     aiInsights,
     triggerExecutiveAudit,
     isScanningAI,
     applyAIRecommendation,
     setExplainModalInsight,
-    orders,
-    tables,
     getComputedHealthScore,
     getComputedRiskLevel,
     getComputedOpportunity,
     getComputedBottleneck,
   } = usePulseStore();
 
-  const primaryInsight = aiInsights[0];
-  const occupiedTablesCount = tables.filter((t) => t.status !== "available").length;
+  const live = isLiveProvider(governor);
+  const primary = aiInsights[0];
 
-  const dynamicHealthScore = getComputedHealthScore();
-  const dynamicRiskLevel = getComputedRiskLevel();
-  const dynamicOpportunity = getComputedOpportunity();
-  const dynamicBottleneck = getComputedBottleneck();
+  const health = getComputedHealthScore();
+  const risk = getComputedRiskLevel();
+  const opportunity = getComputedOpportunity();
+  const bottleneck = getComputedBottleneck();
 
   return (
-    <div className="glass-panel p-6 rounded-2xl border border-white/10 bg-obsidian-900/90 relative overflow-hidden shadow-2xl space-y-6 font-sans">
-      
-      {/* 1. Linear Storytelling Hero Banner: "What's happening in my restaurant?" */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-white/10">
-        <div>
-          <div className="flex items-center space-x-2 font-mono text-xs text-pulse-violet font-bold">
-            <Sparkles className="w-3.5 h-3.5 text-pulse-violet" />
-            <span>EXECUTIVE OPERATIONS INTELLIGENCE</span>
-          </div>
-          <h2 className="text-2xl font-bold text-white tracking-tight mt-1 flex items-center gap-3">
-            Good Evening 👋 Your Restaurant is Operating Efficiently
-            <span className="text-xs font-mono px-3 py-1 rounded-full bg-pulse-emerald/20 text-pulse-emerald border border-pulse-emerald/30 font-bold">
-              Health Score: {dynamicHealthScore}% 🟢
-            </span>
-          </h2>
-        </div>
-
-        <button
-          onClick={triggerExecutiveAudit}
-          disabled={isScanningAI}
-          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-pulse-violet to-pulse-cyan text-white font-bold text-xs hover:scale-105 transition-all flex items-center space-x-2 disabled:opacity-50 shadow-lg"
-        >
-          <Zap className={`w-4 h-4 ${isScanningAI ? "animate-bounce" : ""}`} />
-          <span>{isScanningAI ? "RUNNING EXECUTIVE AUDIT..." : "TRIGGER AUDIT"}</span>
-        </button>
-      </div>
-
-      {/* 2. Key Operational Metrics Matrix */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
-        <div className="p-3.5 rounded-xl bg-obsidian-950/80 border border-white/5">
-          <div className="text-[10px] text-slate-500 uppercase font-bold">Health Score</div>
-          <div className="text-lg font-extrabold text-pulse-emerald mt-0.5">
-            {dynamicHealthScore}% 🟢
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-xl bg-obsidian-950/80 border border-white/5">
-          <div className="text-[10px] text-slate-500 uppercase font-bold">Risk Level</div>
-          <div
-            className={`text-lg font-extrabold mt-0.5 ${
-              dynamicRiskLevel === "HIGH"
-                ? "text-pulse-rose"
-                : dynamicRiskLevel === "MODERATE"
-                ? "text-pulse-amber"
-                : "text-pulse-cyan"
-            }`}
+    <Panel>
+      <PanelHead
+        title="Executive audit"
+        sub={live ? activeModelLabel(governor) : "deterministic · demo"}
+        action={
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => triggerExecutiveAudit()}
+            disabled={isScanningAI}
           >
-            {dynamicRiskLevel}
-          </div>
-        </div>
+            {isScanningAI ? (
+              <>
+                <Loader2 size={14} className="animate-spin" /> Running…
+              </>
+            ) : (
+              <>Run audit</>
+            )}
+          </Button>
+        }
+      />
 
-        <div className="p-3.5 rounded-xl bg-obsidian-950/80 border border-white/5">
-          <div className="text-[10px] text-slate-500 uppercase font-bold">Revenue Upside</div>
-          <div className="text-lg font-extrabold text-pulse-emerald mt-0.5">
-            +₹{dynamicOpportunity.toLocaleString()}
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-xl bg-obsidian-950/80 border border-white/5">
-          <div className="text-[10px] text-slate-500 uppercase font-bold">Main Bottleneck</div>
-          <div className="text-xs font-bold text-pulse-amber truncate mt-1">
-            {dynamicBottleneck}
-          </div>
-        </div>
+      <div className="grid grid-cols-2 border-b border-line-soft md:grid-cols-4">
+        <Metric label="Health" value={`${health}%`} tone={health >= 80 ? "ok" : "busy"} />
+        <Metric label="Risk" value={risk.toLowerCase()} tone={RISK_TONE[risk]} />
+        <Metric label="Upside" value={`₹${opportunity.toLocaleString("en-IN")}`} tone="calm" />
+        <Metric label="Bottleneck" value={bottleneck} tone={bottleneck === "None" ? "mute" : "busy"} small />
       </div>
 
-      {/* 3. Primary Guided Operational Issue Card */}
-      {primaryInsight && (
-        <div className="p-5 rounded-xl bg-obsidian-950/90 border border-white/10 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-bold text-white text-base flex items-center gap-2">
-              <Cpu className="w-4 h-4 text-pulse-violet" />
-              {primaryInsight.title}
-            </h3>
-
-            <button
-              onClick={() => setExplainModalInsight(primaryInsight)}
-              className="text-xs font-mono text-pulse-violet hover:underline flex items-center gap-1 bg-pulse-violet/10 px-2.5 py-1 rounded-lg border border-pulse-violet/20"
-            >
-              <HelpCircle className="w-3.5 h-3.5" />
-              <span>Why? & Why Not?</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
-            <div className="p-3 rounded-lg bg-obsidian-900 border border-white/5">
-              <span className="text-[10px] uppercase font-mono font-bold text-pulse-rose block mb-1">
-                1. WHAT IS HAPPENING RIGHT NOW?
-              </span>
-              <p className="text-slate-200">{primaryInsight.problem}</p>
-            </div>
-
-            <div className="p-3 rounded-lg bg-obsidian-900 border border-white/5">
-              <span className="text-[10px] uppercase font-mono font-bold text-pulse-amber block mb-1">
-                2. WHY IS IT HAPPENING?
-              </span>
-              <p className="text-slate-200">{primaryInsight.cause}</p>
-            </div>
-
-            <div className="p-3 rounded-lg bg-obsidian-900 border border-white/5 md:col-span-2">
-              <span className="text-[10px] uppercase font-mono font-bold text-pulse-cyan block mb-1">
-                3. WHAT SHOULD MANAGER DO NEXT?
-              </span>
-              <p className="text-white font-semibold text-sm">{primaryInsight.recommendation}</p>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-gradient-to-r from-pulse-emerald/15 to-pulse-cyan/15 border border-pulse-emerald/30 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-xs font-mono">
-              <span className="text-[10px] uppercase font-bold text-pulse-emerald block">
-                PROJECTED OUTCOME
-              </span>
-              <span className="text-slate-200 mt-1 block">
-                Wait Time -{primaryInsight.business_impact.wait_reduction_pct}% • Revenue +₹{primaryInsight.business_impact.revenue_increase_val.toLocaleString()}
-              </span>
-            </div>
-
-            <button
-              onClick={() => applyAIRecommendation(primaryInsight.id)}
-              className="px-5 py-2.5 rounded-xl bg-pulse-emerald text-obsidian-950 font-bold text-xs hover:bg-pulse-emerald/90 transition-all flex items-center space-x-1.5 shadow-glow-emerald"
-            >
-              <span>EXECUTE INTERVENTION</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+      {governor.last_error && (
+        <div className="flex items-start gap-2.5 border-b border-state-riskDim bg-state-riskDim/30 px-5 py-3 text-sm text-state-risk">
+          <AlertCircle size={16} className="mt-0.5 shrink-0" />
+          <div>
+            <span className="font-semibold">Last audit failed. </span>
+            <span className="text-state-risk/90">{governor.last_error}</span>
           </div>
         </div>
       )}
+
+      {primary ? (
+        <div className="px-5 py-5">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="mb-1 flex flex-wrap items-center gap-2">
+                <Tag tone={primary.type === "inventory" ? "risk" : "think"}>
+                  {primary.type}
+                </Tag>
+                <span className="num text-xs text-ink-subtle">
+                  confidence {primary.confidence}%
+                  {primary.snapshot_version === "rule" || primary.snapshot_version === "live"
+                    ? ` · ${primary.snapshot_version}`
+                    : ` · ${primary.snapshot_version}`}
+                </span>
+              </div>
+              <h3 className="text-base font-semibold">{primary.title}</h3>
+            </div>
+            <button
+              onClick={() => setExplainModalInsight(primary)}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded border border-line-soft px-2.5 py-1.5 text-xs font-semibold text-ink-subtle transition-colors hover:border-line-loud hover:text-ink"
+            >
+              <HelpCircle size={13} /> Why
+            </button>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <Block label="What is happening" tone="risk">
+              {primary.problem}
+            </Block>
+            <Block label="Why" tone="busy">
+              {primary.cause}
+            </Block>
+            <Block label="What to do next" tone="calm" wide>
+              {primary.recommendation}
+            </Block>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-state-okDim bg-state-okDim/25 px-4 py-3">
+            <div className="text-sm">
+              <span className="text-xs uppercase tracking-[0.04em] text-state-ok">Projected</span>
+              <p className="font-medium">
+                Wait{" "}
+                <span className="num">
+                  −{primary.business_impact.wait_reduction_pct}%
+                </span>
+                {" · "}revenue{" "}
+                <span className="num">
+                  +₹{primary.business_impact.revenue_increase_val.toLocaleString("en-IN")}
+                </span>
+              </p>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              className="ml-auto"
+              onClick={() => applyAIRecommendation(primary.id)}
+            >
+              Apply <ArrowRight size={14} />
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="px-5 py-10 text-center">
+          <p className="text-sm text-ink-subtle">
+            No insight yet. Run an audit to generate one from the live floor state.
+          </p>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  tone = "mute",
+  small,
+}: {
+  label: string;
+  value: string;
+  tone?: Tone;
+  small?: boolean;
+}) {
+  const toneText: Record<Tone, string> = {
+    ok: "text-state-ok",
+    busy: "text-state-busy",
+    risk: "text-state-risk",
+    calm: "text-state-calm",
+    think: "text-state-think",
+    mute: "text-ink",
+  };
+  return (
+    <div className="border-b border-r border-line-soft px-5 py-4 last:border-r-0 [&:nth-child(2n)]:border-r-0 md:[&:nth-child(2n)]:border-r-line-soft md:[&:last-child]:border-r-0">
+      <div className="mb-1 text-xs text-ink-subtle">{label}</div>
+      <div
+        className={cx(
+          small ? "text-sm font-semibold" : "num text-[1.25rem] font-semibold tracking-[-0.02em]",
+          toneText[tone]
+        )}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function Block({
+  label,
+  tone,
+  wide,
+  children,
+}: {
+  label: string;
+  tone: Tone;
+  wide?: boolean;
+  children: React.ReactNode;
+}) {
+  const toneText: Record<Tone, string> = {
+    ok: "text-state-ok",
+    busy: "text-state-busy",
+    risk: "text-state-risk",
+    calm: "text-state-calm",
+    think: "text-state-think",
+    mute: "text-ink-muted",
+  };
+  return (
+    <div className={cx("rounded border border-line-soft bg-obsidian-850 p-3", wide && "md:col-span-2")}>
+      <div className={cx("mb-1 text-[11px] font-semibold uppercase tracking-[0.04em]", toneText[tone])}>
+        {label}
+      </div>
+      <p className="text-sm leading-relaxed">{children}</p>
     </div>
   );
 }

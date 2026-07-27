@@ -39,8 +39,14 @@ export default function AICostSavingsCard() {
           value={governor.avg_latency_ms > 0 ? `${governor.avg_latency_ms}ms` : "—"}
         />
         <Cell
-          label="Tokens saved"
-          value={governor.tokens_saved_pct > 0 ? `${governor.tokens_saved_pct}%` : "—"}
+          label="Est. spend today"
+          value={
+            governor.today_ai_cost_inr > 0
+              ? `₹${governor.today_ai_cost_inr.toLocaleString("en-IN")}`
+              : live
+              ? "₹0"
+              : "—"
+          }
         />
       </dl>
 

@@ -41,6 +41,9 @@ interface PulseState {
   addLiveEvent: (type: LiveEvent["type"], description: string, severity?: LiveEvent["severity"], tableNumber?: number) => void;
   applyAIRecommendation: (insightId: string) => void;
   triggerExecutiveAudit: () => Promise<void>;
+  /** Real (or demo) advisor chat through the provider layer. Returns the
+   *  assistant text so the caller can push it into local message state. */
+  sendAdvisorMessage: (question: string) => Promise<string>;
   
   // Computed Live State Selectors
   getComputedHealthScore: () => number;
@@ -190,6 +193,23 @@ const INITIAL_MEMORY: AIMemoryItem[] = [
   { id: "mem-2", timestamp: "17:45 PM", title: "Promoted Chianti Pairing on Table 4", action_taken: "Smart Recommendation Engine", outcome_metric: "Average Check Size", delta_pct: +14 },
 ];
 
+/** Route a menu item to a kitchen station by category + name. Replaces the
+ *  old "Burger -> Station A, everything else -> Station B" rule that piled
+ *  pizza, calamari, tiramisu and wine all onto Station B and starved C. */
+function stationFor(menu: MenuItem): KitchenTicket["station"] {
+  const name = menu.name.toLowerCase();
+  if (menu.category === "mains" && (name.includes("burger") || name.includes("wagyu") || name.includes("beef"))) {
+    return "Station A (Grill)";
+  }
+  if (menu.category === "mains" && (name.includes("pizza") || name.includes("burrata"))) {
+    return "Station C (Assembly)";
+  }
+  if (menu.category === "desserts" || menu.category === "beverages") {
+    return "Station C (Assembly)";
+  }
+  return "Station B (Saute)";
+}
+
 export const usePulseStore = create<PulseState>((set, get) => ({
   tables: INITIAL_TABLES,
   menuItems: INITIAL_MENU,
@@ -271,7 +291,7 @@ export const usePulseStore = create<PulseState>((set, get) => ({
       stationCounts[tk.station] = (stationCounts[tk.station] || 0) + tk.qty;
     });
 
-    let topStation = "Grill Station A";
+    let topStation = "None";
     let maxQty = 0;
     Object.entries(stationCounts).forEach(([st, qty]) => {
       if (qty > maxQty) {
@@ -280,7 +300,9 @@ export const usePulseStore = create<PulseState>((set, get) => ({
       }
     });
 
-    return topStation;
+    // With an empty kitchen the old default "Grill Station A" was a lie —
+    // it claimed a bottleneck where none existed.
+    return maxQty === 0 ? "None" : topStation;
   },
 
   addLiveEvent: (type, description, severity = "info", table_number) =>
@@ -301,6 +323,34 @@ export const usePulseStore = create<PulseState>((set, get) => ({
     const table = state.tables.find((t) => t.id === tableId);
     if (!table) return;
 
+    // 6.13: cannot order on a table that isn't ready for guests. A free table
+    // gets auto-seated; a dirty/blocked table is rejected silently (the guest
+    // UI now disables order on such tables too).
+    if (table.status === "needs_cleaning") {
+      state.addLiveEvent(
+        "table",
+        `Order rejected: Table ${table.table_number} needs clearing first.`,
+        "danger",
+        table.table_number
+      );
+      return;
+    }
+
+    // Stock guard (6.14): refuse to oversell a menu item past its stock.
+    for (const item of items) {
+      const menu = state.menuItems.find((m) => m.id === item.menuItemId);
+      if (!menu) continue;
+      if (menu.stock_qty < item.qty) {
+        state.addLiveEvent(
+          "order",
+          `Order rejected: only ${menu.stock_qty} × ${menu.name} left.`,
+          "danger",
+          table.table_number
+        );
+        return;
+      }
+    }
+
     let orderTotal = 0;
     const orderItems = items.map((item) => {
       const menu = state.menuItems.find((m) => m.id === item.menuItemId);
@@ -317,6 +367,7 @@ export const usePulseStore = create<PulseState>((set, get) => ({
       };
     });
 
+    const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const newOrder: Order = {
       id: `ord-${Date.now()}`,
       table_id: tableId,
@@ -325,18 +376,21 @@ export const usePulseStore = create<PulseState>((set, get) => ({
       status: "preparing",
       total_amount: orderTotal,
       wait_time_est: 12,
-      created_at: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      created_at: now,
       items: orderItems,
     };
 
+    const wasAvailable = table.status === "available";
     const updatedTables = state.tables.map((t) =>
       t.id === tableId
         ? {
             ...t,
+            // 6.13: only flip an available table to cooking; a seated/ordering
+            // table keeps its current status lineage.
             status: "kitchen_cooking" as TableStatus,
             bill_amount: t.bill_amount + orderTotal,
             active_order_id: newOrder.id,
-            seated_at: t.seated_at || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            seated_at: t.seated_at || now,
           }
         : t
     );
@@ -364,9 +418,11 @@ export const usePulseStore = create<PulseState>((set, get) => ({
           qty: item.qty,
           table_numbers: [table.table_number],
           status: "cooking",
-          station: menu.name.includes("Burger") ? "Station A (Grill)" : "Station B (Saute)",
+          // 6.15: route across all three stations by category, not the old
+          // Burger->A / else->B binary that starved Station C.
+          station: stationFor(menu),
           prep_priority: "high",
-          created_at: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          created_at: now,
         });
       }
     });
@@ -381,16 +437,23 @@ export const usePulseStore = create<PulseState>((set, get) => ({
       return inv;
     });
 
+    // 6.14: menu cards now show real, decrementing stock.
+    const updatedMenu = state.menuItems.map((m) => {
+      const ordered = items.find((i) => i.menuItemId === m.id);
+      return ordered ? { ...m, stock_qty: Math.max(0, m.stock_qty - ordered.qty) } : m;
+    });
+
     set({
       orders: [newOrder, ...state.orders],
       tables: updatedTables,
       kitchenQueue: updatedQueue,
       inventory: updatedInventory,
+      menuItems: updatedMenu,
     });
 
     state.addLiveEvent(
       "order",
-      `Table ${table.table_number} placed order for ${items.length} items (₹${orderTotal.toLocaleString()})`,
+      `Table ${table.table_number} placed order for ${items.length} item${items.length === 1 ? "" : "s"} (₹${orderTotal.toLocaleString()})${wasAvailable ? " · table seated" : ""}`,
       "info",
       table.table_number
     );
@@ -401,12 +464,13 @@ export const usePulseStore = create<PulseState>((set, get) => ({
     const ticket = state.kitchenQueue.find((t) => t.id === ticketId);
     if (!ticket) return;
 
-    const nextStatus: "pending" | "cooking" | "ready" =
-      ticket.status === "pending" ? "cooking" : ticket.status === "cooking" ? "ready" : "ready";
+    // 6.5: ready is terminal. Previously the fall-through mapped ready->ready,
+    // so clicking "Mark ready" again re-fired the table status update +
+    // duplicate live event, and the queue grew unbounded. Now we no-op.
+    if (ticket.status === "ready") return;
 
-    const updatedQueue: KitchenTicket[] = state.kitchenQueue.map((t) =>
-      t.id === ticketId ? { ...t, status: nextStatus } : t
-    );
+    const nextStatus: "pending" | "cooking" | "ready" =
+      ticket.status === "pending" ? "cooking" : "ready";
 
     let updatedTables = state.tables;
     if (nextStatus === "ready") {
@@ -415,11 +479,25 @@ export const usePulseStore = create<PulseState>((set, get) => ({
       );
     }
 
-    set({ kitchenQueue: updatedQueue, tables: updatedTables });
+    if (nextStatus === "ready") {
+      // Terminal state: drop the ticket from the active queue entirely.
+      set({
+        kitchenQueue: state.kitchenQueue.filter((t) => t.id !== ticketId),
+        tables: updatedTables,
+      });
+    } else {
+      set({
+        kitchenQueue: state.kitchenQueue.map((t) =>
+          t.id === ticketId ? { ...t, status: nextStatus } : t
+        ),
+      });
+    }
 
     state.addLiveEvent(
       "kitchen",
-      `Kitchen ${ticket.station} marked ${ticket.dish_name} as ${nextStatus.toUpperCase()}`,
+      nextStatus === "ready"
+        ? `${ticket.dish_name} is up — Table ${ticket.table_numbers.join(" + ")} served`
+        : `Kitchen ${ticket.station} started ${ticket.dish_name}`,
       nextStatus === "ready" ? "success" : "info"
     );
   },
@@ -441,8 +519,17 @@ export const usePulseStore = create<PulseState>((set, get) => ({
         : t
     );
 
-    set({ tables: updatedTables });
-    state.addLiveEvent("table", `Table ${table.table_number} cleared and reset to AVAILABLE`, "info", table.table_number);
+    // 6.6: complete the table's open orders. Otherwise the customer page's
+    // activeOrder lookup (any non-completed order) re-shows the tracker banner
+    // for a table the manager just cleared.
+    const updatedOrders = state.orders.map((o) =>
+      o.table_id === tableId && o.status !== "completed" && o.status !== "cancelled"
+        ? { ...o, status: "completed" as const }
+        : o
+    );
+
+    set({ tables: updatedTables, orders: updatedOrders });
+    state.addLiveEvent("table", `Table ${table.table_number} cleared and back in service`, "info", table.table_number);
   },
 
   applyAIRecommendation: (insightId) => {
@@ -476,15 +563,17 @@ export const usePulseStore = create<PulseState>((set, get) => ({
     set({ isScanningAI: true });
 
     try {
-      const startedAt = performance.now();
       const res = await fetch("/api/ai/health-scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "run_audit",
           activeOrdersCount: state.orders.length,
           tablesOccupied: state.tables.filter((t) => t.status !== "available").length,
           kitchenLoad: 84,
-          lowInventory: state.inventory.filter((i) => i.current_stock <= i.min_threshold).map((i) => i.name),
+          lowInventory: state.inventory
+            .filter((i) => i.current_stock <= i.min_threshold)
+            .map((i) => i.name),
           providerType: state.governor.provider_type,
           providerMode: state.governor.provider_mode,
           userApiKey: state.governor.personal_api_key || "",
@@ -493,10 +582,14 @@ export const usePulseStore = create<PulseState>((set, get) => ({
       });
 
       const data = await res.json();
-      if (data.success && data.insight) {
-        const elapsed = Math.round(performance.now() - startedAt);
+      if (res.ok && data.success && data.insight) {
+        const t = data.telemetry;
         const requestCount = state.governor.ai_requests_count + 1;
         const cacheHits = state.governor.cache_hit_count + (data.isCached ? 1 : 0);
+        const addedCost = t?.estimatedCostInr ?? 0; // demo/fallback = 0
+        const addedLatency = t?.latencyMs ?? 0;
+        const healthScore = data.healthScore || state.getComputedHealthScore();
+
         set((s) => ({
           aiInsights: [data.insight, ...s.aiInsights],
           governor: {
@@ -504,22 +597,81 @@ export const usePulseStore = create<PulseState>((set, get) => ({
             ai_requests_count: requestCount,
             cache_hit_count: cacheHits,
             tokens_saved_pct: requestCount ? Math.round((cacheHits / requestCount) * 100) : 0,
-            avg_latency_ms: elapsed,
+            avg_latency_ms: addedLatency || s.governor.avg_latency_ms,
+            today_ai_cost_inr: Math.round((s.governor.today_ai_cost_inr + addedCost) * 100) / 100,
+            budget_used_inr: Math.round((s.governor.budget_used_inr + addedCost) * 100) / 100,
             is_offline_fallback: Boolean(data.isFallback),
             last_scan_time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            health_score: data.healthScore || s.getComputedHealthScore(),
+            health_score: healthScore,
             last_error: undefined,
           },
         }));
 
-        state.addLiveEvent("ai", `Executive Operations Audit complete (Health Score: ${data.healthScore || state.getComputedHealthScore()}%)`, "success");
+        state.addLiveEvent(
+          "ai",
+          data.isFallback
+            ? `Audit ran on the deterministic engine (Health ${healthScore}%).`
+            : `Live audit complete — ${state.governor.provider_type} ${state.governor.selected_model} (Health ${healthScore}%).`,
+          "success"
+        );
       } else {
-        set((s) => ({ governor: { ...s.governor, last_error: data.error || "The AI request failed." } }));
+        const msg = data.error || "The audit failed.";
+        set((s) => ({ governor: { ...s.governor, last_error: msg } }));
+        state.addLiveEvent("ai", `Audit failed: ${msg}`, "danger");
       }
     } catch (err) {
-      set((s) => ({ governor: { ...s.governor, last_error: "The AI request could not reach the server." } }));
+      const msg = "The audit could not reach the server.";
+      set((s) => ({ governor: { ...s.governor, last_error: msg } }));
     } finally {
       set({ isScanningAI: false });
+    }
+  },
+
+  sendAdvisorMessage: async (question) => {
+    const state = get();
+    try {
+      const res = await fetch("/api/ai/health-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "run_chat",
+          question,
+          activeOrdersCount: state.orders.length,
+          tablesOccupied: state.tables.filter((t) => t.status !== "available").length,
+          kitchenLoad: 84,
+          lowInventory: state.inventory
+            .filter((i) => i.current_stock <= i.min_threshold)
+            .map((i) => i.name),
+          providerType: state.governor.provider_type,
+          providerMode: state.governor.provider_mode,
+          userApiKey: state.governor.personal_api_key || "",
+          selectedModel: state.governor.selected_model,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const t = data.telemetry;
+        if (t) {
+          set((s) => ({
+            governor: {
+              ...s.governor,
+              ai_requests_count: s.governor.ai_requests_count + 1,
+              avg_latency_ms: t.latencyMs || s.governor.avg_latency_ms,
+              today_ai_cost_inr:
+                Math.round((s.governor.today_ai_cost_inr + (t.estimatedCostInr ?? 0)) * 100) / 100,
+              budget_used_inr:
+                Math.round((s.governor.budget_used_inr + (t.estimatedCostInr ?? 0)) * 100) / 100,
+              last_error: undefined,
+            },
+          }));
+        }
+        return data.text as string;
+      }
+      set((s) => ({ governor: { ...s.governor, last_error: data.error || "The advisor failed." } }));
+      return data.error || "The advisor could not answer that.";
+    } catch (err) {
+      set((s) => ({ governor: { ...s.governor, last_error: "The advisor could not reach the server." } }));
+      return "The advisor could not reach the server.";
     }
   },
 }));

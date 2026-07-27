@@ -164,4 +164,7 @@ export interface GovernorState {
   bottleneck_station: string;
   is_key_valid?: boolean;
   validation_error?: string;
+  /** Set when the last audit/chat failed. Surfaced inline so a failed scan
+   *  never silently returns to idle with zero feedback. */
+  last_error?: string;
 }

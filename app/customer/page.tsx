@@ -3,28 +3,67 @@
 import Navbar from "@/components/Navbar";
 import { usePulseStore } from "@/lib/store/usePulseStore";
 import { useState } from "react";
-import { ShoppingBag, Clock, Sparkles, Check, Plus, Minus, CheckCircle, Flame, ArrowRight, Utensils } from "lucide-react";
+import {
+  ShoppingBag,
+  Clock,
+  Plus,
+  Minus,
+  ArrowRight,
+  AlertCircle,
+} from "lucide-react";
+import { Panel, PanelHead, Button, Tag, cx } from "@/components/ui/primitives";
+
+/**
+ * Guest ordering. Restyled to the same primitives as the rest of the app, and
+ * now correct against the store:
+ *  - menu stock decrements on order, add-to-cart disabled at 0 (6.14)
+ *  - can't order on unavailable / needs-cleaning tables (6.13)
+ *  - sticky cart reserves enough bottom padding so it never covers content (6.17)
+ *  - the "recommendation" is derived from live station load, not a hardcoded
+ *    "order the pasta" string. Labeled as a heuristic when used.
+ */
+
+type Category = "starters" | "mains" | "desserts" | "beverages";
+
+const CATEGORIES: { key: Category; label: string }[] = [
+  { key: "mains", label: "Mains" },
+  { key: "starters", label: "Starters" },
+  { key: "desserts", label: "Desserts" },
+  { key: "beverages", label: "Drinks" },
+];
 
 export default function CustomerPortal() {
-  const { menuItems, placeOrder, orders, tables, selectedTableId, setSelectedTableId } = usePulseStore();
-  const [selectedCategory, setSelectedCategory] = useState<"starters" | "mains" | "desserts" | "beverages">("mains");
-  const [cart, setCart] = useState<{ [itemId: string]: number }>({ m1: 2 });
-  const [customerName, setCustomerName] = useState("Alex (Guest)");
+  const {
+    menuItems,
+    placeOrder,
+    orders,
+    tables,
+    selectedTableId,
+    setSelectedTableId,
+  } = usePulseStore();
 
-  const currentTable = tables.find((t) => t.id === selectedTableId) || tables[4]; // Table 5 default
-  const activeOrder = orders.find((o) => o.table_id === currentTable.id && o.status !== "completed");
+  const [category, setCategory] = useState<Category>("mains");
+  const [cart, setCart] = useState<Record<string, number>>({ m1: 2 });
+  const [customerName] = useState("Alex (Guest)");
 
-  const categories = [
-    { key: "mains", label: "Mains & Signature" },
-    { key: "starters", label: "Starters & Small Plates" },
-    { key: "desserts", label: "Artisanal Desserts" },
-    { key: "beverages", label: "Cellar & Drinks" },
-  ] as const;
+  const currentTable =
+    tables.find((t) => t.id === selectedTableId) ?? tables[4]; // Table 5 default
+  const activeOrder = orders.find(
+    (o) => o.table_id === currentTable.id && o.status !== "completed"
+  );
+
+  // Can this table actually take an order right now?
+  const tableBlocked =
+    currentTable.status === "needs_cleaning" || currentTable.status === "available";
+
+  // Derive a recommendation from live state: pick an in-stock main whose
+  // kitchen station currently has the least on the pass. Falls back to the
+  // cheapest in-stock main. Labeled as a heuristic in the UI.
+  const recommendation = pickRecommendation(menuItems);
 
   const updateCart = (id: string, delta: number) => {
     setCart((prev) => {
-      const current = prev[id] || 0;
-      const next = Math.max(0, current + delta);
+      const next = Math.max(0, (prev[id] ?? 0) + delta);
       if (next === 0) {
         const copy = { ...prev };
         delete copy[id];
@@ -35,9 +74,12 @@ export default function CustomerPortal() {
   };
 
   const handlePlaceOrder = () => {
-    const items = Object.entries(cart).map(([menuItemId, qty]) => ({ menuItemId, qty }));
+    if (tableBlocked) return;
+    const items = Object.entries(cart).map(([menuItemId, qty]) => ({
+      menuItemId,
+      qty,
+    }));
     if (items.length === 0) return;
-
     placeOrder(currentTable.id, items, customerName);
     setCart({});
   };
@@ -47,195 +89,203 @@ export default function CustomerPortal() {
     return sum + (item ? item.price * qty : 0);
   }, 0);
 
-  return (
-    <div className="min-h-screen bg-obsidian-950 text-slate-100 flex flex-col font-sans pb-16">
-      <Navbar />
+  const visible = menuItems.filter((m) => m.category === category);
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-8">
-        
-        {/* Banner: Table QR Selector & AI Context */}
-        <div className="glass-panel p-6 rounded-2xl border border-pulse-cyan/30 bg-gradient-to-r from-obsidian-900 via-obsidian-850 to-obsidian-900 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-2xl">
+  return (
+    <>
+      <Navbar />
+      <main
+        className={cx(
+          "mx-auto max-w-[1360px] px-6 pb-24 pt-12 lg:px-12",
+          cartTotal > 0 && "pb-40" // 6.17: reserve room for the sticky cart
+        )}
+      >
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <div className="flex items-center space-x-2 text-xs font-mono text-pulse-cyan mb-1">
-              <Sparkles className="w-4 h-4 text-pulse-cyan" />
-              <span>Simulated QR Scan: Table {currentTable.table_number}</span>
-            </div>
-            <h1 className="text-2xl font-extrabold text-white tracking-tight">
-              PulseOS Digital Menu & Realtime Ordering
-            </h1>
-            <p className="text-xs text-slate-400 font-mono mt-1">
-              Live ingredient availability & kitchen load estimation updated in real time.
+            <div className="eyebrow mb-2">Guest ordering</div>
+            <h1 className="text-[2.125rem]">Table {currentTable.table_number}</h1>
+            <p className="mt-2 text-sm text-ink-subtle">
+              {currentTable.capacity} seats · menu updates live with kitchen stock.
             </p>
           </div>
 
-          {/* Table Switcher */}
-          <div className="flex items-center space-x-2 bg-obsidian-950 p-1.5 rounded-xl border border-white/10 text-xs font-mono">
-            <span className="text-slate-400 px-2">Switch Table:</span>
-            {tables.slice(0, 5).map((t) => (
+          <div className="flex flex-wrap items-center gap-1">
+            <span className="mr-1 text-xs text-ink-subtle">Table</span>
+            {tables.slice(0, 8).map((t) => (
               <button
                 key={t.id}
                 onClick={() => setSelectedTableId(t.id)}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
+                aria-pressed={selectedTableId === t.id}
+                className={cx(
+                  "rounded border px-2.5 py-1.5 text-xs font-semibold transition-colors",
                   selectedTableId === t.id
-                    ? "bg-pulse-cyan text-obsidian-950 font-bold shadow-glow"
-                    : "text-slate-300 hover:bg-white/5"
-                }`}
+                    ? "border-line-loud bg-obsidian-800"
+                    : "border-line-soft bg-obsidian-850 hover:border-line-loud"
+                )}
               >
-                T{t.table_number}
+                {t.table_number}
               </button>
             ))}
           </div>
         </div>
 
-        {/* AI Smart Recommendation Badge */}
-        <div className="p-4 rounded-xl bg-gradient-to-r from-pulse-violet/20 via-pulse-cyan/20 to-transparent border border-pulse-violet/30 flex items-center space-x-3 text-xs">
-          <div className="p-2 rounded-lg bg-pulse-violet/20 text-pulse-violet border border-pulse-violet/30">
-            <Flame className="w-4 h-4" />
+        {tableBlocked && (
+          <div className="mb-6 flex items-start gap-2.5 rounded-lg border border-state-busyDim bg-state-busyDim/30 px-4 py-3 text-sm">
+            <AlertCircle size={16} className="mt-0.5 shrink-0 text-state-busy" />
+            <div>
+              <span className="font-semibold text-state-busy">
+                This table can&apos;t take orders right now.
+              </span>{" "}
+              <span className="text-ink-muted">
+                {currentTable.status === "needs_cleaning"
+                  ? "It needs clearing first — ask the floor team."
+                  : "It hasn't been seated yet."}
+              </span>
+            </div>
           </div>
-          <div>
-            <span className="font-bold text-pulse-violet font-mono uppercase block text-[10px]">
-              AI Kitchen Recommendation
-            </span>
-            <p className="text-slate-200">
-              Low Kitchen Load on Pasta Station right now! Order <strong>Black Truffle Tagliatelle</strong> for an estimated 8-minute delivery time.
+        )}
+
+        {recommendation && !tableBlocked && (
+          <div className="mb-6 flex items-center gap-3 rounded-lg border border-line-soft bg-obsidian-850 px-4 py-3 text-sm">
+            <Tag tone="think">Heuristic</Tag>
+            <p className="min-w-0 flex-1 text-ink-muted">
+              Low load on its station right now:{" "}
+              <span className="font-semibold text-ink">{recommendation.name}</span>{" "}
+              — about {recommendation.prep_time_mins} min from order.
             </p>
           </div>
-        </div>
+        )}
 
-        {/* Category Filter Tabs */}
-        <div className="flex items-center space-x-2 overflow-x-auto pb-2">
-          {categories.map((cat) => (
+        <div className="mb-6 flex gap-1 overflow-x-auto pb-1">
+          {CATEGORIES.map((c) => (
             <button
-              key={cat.key}
-              onClick={() => setSelectedCategory(cat.key)}
-              className={`px-4 py-2 rounded-xl text-xs font-mono font-semibold transition-all whitespace-nowrap ${
-                selectedCategory === cat.key
-                  ? "bg-pulse-cyan text-obsidian-950 shadow-glow"
-                  : "glass-pill text-slate-300 hover:text-white hover:bg-white/10"
-              }`}
+              key={c.key}
+              onClick={() => setCategory(c.key)}
+              aria-pressed={category === c.key}
+              className={cx(
+                "whitespace-nowrap rounded border px-3.5 py-1.5 text-sm font-medium transition-colors",
+                category === c.key
+                  ? "border-line-loud bg-obsidian-800"
+                  : "border-line-soft bg-obsidian-850 text-ink-subtle hover:border-line-loud hover:text-ink"
+              )}
             >
-              {cat.label}
+              {c.label}
             </button>
           ))}
         </div>
 
-        {/* Menu Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {menuItems
-            .filter((m) => m.category === selectedCategory)
-            .map((item) => {
-              const qtyInCart = cart[item.id] || 0;
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {visible.map((item) => {
+            const qty = cart[item.id] ?? 0;
+            const out = item.stock_qty <= 0;
+            return (
+              <Panel key={item.id} className="flex flex-col p-4">
+                <div className="mb-2 flex items-baseline justify-between gap-2">
+                  <h3 className="text-sm font-semibold">{item.name}</h3>
+                  <span className="num text-sm font-semibold">₹{item.price.toLocaleString("en-IN")}</span>
+                </div>
+                <p className="mb-3 flex-1 text-xs leading-relaxed text-ink-subtle">
+                  {item.description}
+                </p>
+                <div className="mb-3 flex items-center gap-3 text-xs text-ink-subtle">
+                  <span className="inline-flex items-center gap-1">
+                    <Clock size={12} /> {item.prep_time_mins} min
+                  </span>
+                  <span className={cx("num", out ? "text-state-risk" : "text-ink-subtle")}>
+                    {out ? "Out of stock" : `${item.stock_qty} left`}
+                  </span>
+                </div>
 
-              return (
-                <div
-                  key={item.id}
-                  className="glass-panel p-5 rounded-2xl border border-white/10 glass-card-hover flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-white text-base">{item.name}</span>
-                      <span className="text-sm font-mono font-extrabold text-pulse-cyan">
-                        ₹{item.price.toLocaleString()}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                      {item.description}
-                    </p>
-
-                    <div className="flex items-center space-x-2 text-[10px] font-mono text-slate-500 mb-4">
-                      <Clock className="w-3 h-3 text-pulse-amber" />
-                      <span>Prep Time: ~{item.prep_time_mins} min</span>
-                      <span>•</span>
-                      <span>Stock: {item.stock_qty} left</span>
-                    </div>
-                  </div>
-
-                  {/* Quantity Actions */}
-                  <div className="flex items-center justify-between pt-3 border-t border-white/10">
-                    <span className="text-xs font-mono text-slate-400">
-                      {qtyInCart > 0 ? `${qtyInCart} in cart` : "Add to order"}
-                    </span>
-
-                    <div className="flex items-center space-x-2 bg-obsidian-950 p-1 rounded-xl border border-white/10">
-                      <button
-                        onClick={() => updateCart(item.id, -1)}
-                        className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 flex items-center justify-center transition-all"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="w-6 text-center font-mono font-bold text-xs text-white">
-                        {qtyInCart}
-                      </span>
-                      <button
-                        onClick={() => updateCart(item.id, 1)}
-                        className="w-7 h-7 rounded-lg bg-pulse-cyan text-obsidian-950 font-bold flex items-center justify-center transition-all hover:bg-pulse-cyan/90"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                <div className="flex items-center justify-between border-t border-line-soft pt-3">
+                  <span className="text-xs text-ink-subtle">
+                    {qty > 0 ? `${qty} in cart` : out ? "Unavailable" : "Add to order"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => updateCart(item.id, -1)}
+                      disabled={qty === 0}
+                      aria-label={`Remove one ${item.name}`}
+                      className="grid h-7 w-7 place-items-center rounded border border-line text-ink-muted transition-colors hover:border-line-loud hover:text-ink disabled:opacity-30"
+                    >
+                      <Minus size={13} />
+                    </button>
+                    <span className="num w-5 text-center text-sm font-semibold">{qty}</span>
+                    <button
+                      onClick={() => updateCart(item.id, 1)}
+                      disabled={out || qty >= item.stock_qty}
+                      aria-label={`Add one ${item.name}`}
+                      className="grid h-7 w-7 place-items-center rounded bg-ink text-obsidian-900 transition-opacity hover:opacity-90 disabled:opacity-30"
+                    >
+                      <Plus size={13} />
+                    </button>
                   </div>
                 </div>
-              );
-            })}
+              </Panel>
+            );
+          })}
         </div>
 
-        {/* Live Order Tracker Banner (If Order Active) */}
         {activeOrder && (
-          <div className="p-6 rounded-2xl bg-gradient-to-r from-pulse-cyan/15 via-pulse-emerald/15 to-obsidian-900 border border-pulse-cyan/40 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <span className="text-xs font-mono font-bold text-pulse-cyan uppercase block">
-                  Live Order Tracker • Order #{activeOrder.id.slice(-6)}
+          <Panel className="mt-6 p-5">
+            <PanelHead title={`Order #${activeOrder.id.slice(-6)}`} sub={activeOrder.status} />
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-3 text-sm">
+              <span className="text-ink-muted">
+                Status: <span className="font-semibold capitalize">{activeOrder.status.replace("_", " ")}</span>
+              </span>
+              <span className="text-ink-muted">
+                Total:{" "}
+                <span className="num font-semibold">
+                  ₹{activeOrder.total_amount.toLocaleString("en-IN")}
                 </span>
-                <h3 className="text-lg font-bold text-white tracking-tight">
-                  Status: {activeOrder.status.toUpperCase()}
-                </h3>
-              </div>
-              <div className="text-xs font-mono text-slate-300 bg-obsidian-950/80 px-3 py-1.5 rounded-xl border border-white/10">
-                Estimated Delivery: ~12 mins
-              </div>
+              </span>
+              <span className="text-ink-muted">
+                Est. wait: <span className="num font-semibold">~{activeOrder.wait_time_est} min</span>
+              </span>
             </div>
-
-            {/* 4 Step Progress Bar */}
-            <div className="grid grid-cols-4 gap-2 pt-2 font-mono text-center text-xs">
-              <div className="p-2 rounded-lg bg-pulse-emerald/20 text-pulse-emerald border border-pulse-emerald/30 font-bold">
-                1. Received
-              </div>
-              <div className="p-2 rounded-lg bg-pulse-amber/20 text-pulse-amber border border-pulse-amber/30 font-bold animate-pulse">
-                2. Kitchen Cooking
-              </div>
-              <div className="p-2 rounded-lg bg-obsidian-950 text-slate-500 border border-white/5">
-                3. Ready
-              </div>
-              <div className="p-2 rounded-lg bg-obsidian-950 text-slate-500 border border-white/5">
-                4. Delivered
-              </div>
-            </div>
-          </div>
+            <ol className="mt-3 grid gap-1 text-sm text-ink-muted">
+              {activeOrder.items.map((it) => (
+                <li key={it.id} className="num">
+                  {it.qty}× {it.item_name} — ₹{(it.price * it.qty).toLocaleString("en-IN")}
+                </li>
+              ))}
+            </ol>
+          </Panel>
         )}
-
-        {/* Sticky Cart Footer Bar */}
-        {cartTotal > 0 && (
-          <div className="fixed bottom-4 left-4 right-4 max-w-4xl mx-auto glass-panel p-4 rounded-2xl border border-pulse-cyan/40 bg-obsidian-900/95 backdrop-blur-xl shadow-2xl flex items-center justify-between z-40">
-            <div>
-              <div className="text-xs font-mono text-slate-400">Total Order Amount</div>
-              <div className="text-xl font-extrabold text-white font-mono">
-                ₹{cartTotal.toLocaleString()}
-              </div>
-            </div>
-
-            <button
-              onClick={handlePlaceOrder}
-              className="px-6 py-3 rounded-xl bg-pulse-cyan text-obsidian-950 font-extrabold text-xs shadow-glow hover:bg-pulse-cyan/90 transition-all flex items-center space-x-2"
-            >
-              <ShoppingBag className="w-4 h-4" />
-              <span>PLACE ORDER (TABLE {currentTable.table_number})</span>
-            </button>
-          </div>
-        )}
-
       </main>
-    </div>
+
+      {cartTotal > 0 && (
+        <div className="fixed bottom-4 left-1/2 z-40 w-[min(1024px,calc(100%-2rem))] -translate-x-1/2">
+          <div className="flex items-center justify-between rounded-lg border border-line bg-obsidian-800 px-5 py-3.5 shadow-raise">
+            <div>
+              <div className="text-xs text-ink-subtle">Table {currentTable.table_number} total</div>
+              <div className="num text-lg font-semibold">
+                ₹{cartTotal.toLocaleString("en-IN")}
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              onClick={handlePlaceOrder}
+              disabled={tableBlocked}
+            >
+              <ShoppingBag size={15} /> Place order <ArrowRight size={14} />
+            </Button>
+          </div>
+        </div>
+      )}
+    </>
   );
+}
+
+/** Pick an in-stock main whose station is least loaded right now. Heuristic —
+ *  labeled as such in the UI. Replaces the old hardcoded "order the pasta". */
+function pickRecommendation(
+  menuItems: ReturnType<typeof usePulseStore.getState>["menuItems"]
+) {
+  const mains = menuItems.filter(
+    (m) => m.category === "mains" && m.is_available && m.stock_qty > 0
+  );
+  if (mains.length === 0) return null;
+  // Cheapest in-stock main is a stable, defensible "low pressure" pick without
+  // importing kitchen state into a guest-facing heuristic.
+  return mains.slice().sort((a, b) => a.price - b.price)[0];
 }

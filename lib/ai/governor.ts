@@ -1,14 +1,16 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { AIInsight, GeminiModelInfo, AIProviderMode, AIProviderType } from "../types/pulse";
+import { AIInsight, AIProviderMode, AIProviderType } from "../types/pulse";
+import { generate, ProviderError, type TokenUsage } from "./providers";
+import { estimateCostInr } from "./cost";
 
-interface CachedResponse {
-  insight: AIInsight;
-  healthScore: number;
-  timestamp: number;
-}
-
-let cachedScan: CachedResponse | null = null;
-const ADAPTIVE_CACHE_TTL_MS = 30000;
+/**
+ * governor — the operational intelligence scan + chat entry point.
+ *
+ * This used to duplicate providers.ts with a Gemini-only SDK and a pile of
+ * hardcoded fake model lists ("gemini-3.5-flash" badges, etc.). It now goes
+ * through the real provider abstraction: Gemini / OpenAI / Anthropic /
+ * OpenRouter all hit the same generate(). Demo mode is an honest deterministic
+ * fallback built from the live snapshot — flagged isFallback, never hidden.
+ */
 
 export interface SnapshotPayload {
   activeOrdersCount: number;
@@ -21,264 +23,89 @@ export interface SnapshotPayload {
   selectedModel?: string;
 }
 
-export async function validateApiKey(apiKey: string, provider: AIProviderType = "gemini"): Promise<{ success: boolean; error?: string; models?: GeminiModelInfo[] }> {
-  if (!apiKey || apiKey.trim().length < 6) {
-    return { success: false, error: "API key is too short or empty." };
+export interface GovernorResult {
+  insight: AIInsight;
+  healthScore: number;
+  isCached: boolean;
+  isFallback: boolean;
+  /** Present on real (non-demo) calls so the store can track spend/latency. */
+  telemetry?: { usage: TokenUsage; estimatedCostInr: number; latencyMs: number };
+}
+
+const SCAN_CACHE_TTL_MS = 30_000;
+
+interface CacheEntry {
+  insight: AIInsight;
+  healthScore: number;
+  timestamp: number;
+}
+// Cache is keyed by a composite of snapshot + provider + model + mode. The old
+// build cached on a module singleton, so a real-key call returned the prior
+// demo insight. That cross-contamination is now impossible.
+const scanCache = new Map<string, CacheEntry>();
+const SCAN_CACHE_MAX = 16;
+
+function cacheKey(snapshot: SnapshotPayload): string {
+  return JSON.stringify({
+    l: snapshot.lowInventory,
+    o: snapshot.tablesOccupied,
+    a: snapshot.activeOrdersCount,
+    k: snapshot.kitchenLoad,
+    p: snapshot.providerType,
+    m: snapshot.providerMode,
+    s: snapshot.selectedModel,
+  });
+}
+
+function pushCache(key: string, entry: CacheEntry) {
+  if (scanCache.size >= SCAN_CACHE_MAX) {
+    // evict oldest
+    const firstKey = scanCache.keys().next().value;
+    if (firstKey) scanCache.delete(firstKey);
   }
-
-  try {
-    if (provider === "gemini") {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-      if (!res.ok) {
-        return { success: false, error: `Invalid API Key (HTTP ${res.status}: Unauthorized)` };
-      }
-      const data = await res.json();
-      if (!data.models || !Array.isArray(data.models)) {
-        return { success: false, error: "No models returned for this API key." };
-      }
-      const models = await fetchAvailableGeminiModels(apiKey);
-      return { success: true, models };
-    } else if (provider === "openai") {
-      const res = await fetch("https://api.openai.com/v1/models", {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      if (!res.ok) {
-        return { success: false, error: `Invalid OpenAI API Key (HTTP ${res.status}: Unauthorized)` };
-      }
-      return { success: true, models: getOpenAIModels() };
-    } else if (provider === "openrouter") {
-      const res = await fetch("https://openrouter.ai/api/v1/models", {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      if (!res.ok) {
-        return { success: false, error: `Invalid OpenRouter API Key (HTTP ${res.status}: Unauthorized)` };
-      }
-      return { success: true, models: getOpenRouterModels() };
-    } else {
-      const res = await fetch("https://api.anthropic.com/v1/models", {
-        headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      });
-      if (!res.ok) {
-        return { success: false, error: `Invalid Anthropic API Key (HTTP ${res.status}: Unauthorized)` };
-      }
-      return { success: true, models: getAnthropicModels() };
-    }
-  } catch (err: any) {
-    return { success: false, error: `Connection failed: ${err.message || "Network error"}` };
-  }
+  scanCache.set(key, entry);
 }
 
-export async function fetchAvailableGeminiModels(apiKey: string): Promise<GeminiModelInfo[]> {
-  if (!apiKey) return getDefaultFallbackModels();
-
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-    if (!res.ok) return getDefaultFallbackModels();
-
-    const data = await res.json();
-    if (!data.models || !Array.isArray(data.models)) return getDefaultFallbackModels();
-
-    const supported: GeminiModelInfo[] = data.models
-      .filter((m: any) =>
-        m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent")
-      )
-      .map((m: any) => {
-        const cleanName = m.name.replace("models/", "");
-        const isLatest36 = cleanName.includes("3.6");
-        const isFlash = cleanName.includes("flash");
-        const isPro = cleanName.includes("pro");
-        const isLite = cleanName.includes("lite");
-
-        let badgeLabel = undefined;
-        let speedRating = 4;
-        let costRating = 4;
-        let qualityRating = 4;
-
-        if (isLatest36 && isFlash) {
-          badgeLabel = "⭐ Recommended by PulseOS";
-          speedRating = 5;
-          costRating = 4;
-          qualityRating = 5;
-        } else if (isFlash && isLite) {
-          badgeLabel = "⚡ Ultra Low Cost";
-          speedRating = 5;
-          costRating = 5;
-          qualityRating = 3;
-        } else if (isPro) {
-          badgeLabel = "🧠 Deep Reasoning";
-          speedRating = 3;
-          costRating = 3;
-          qualityRating = 5;
-        } else if (isFlash) {
-          badgeLabel = "🚀 Fast Operational";
-          speedRating = 5;
-          costRating = 4;
-          qualityRating = 4;
-        }
-
-        return {
-          name: cleanName,
-          displayName: m.displayName || cleanName,
-          description: m.description || "Google Gemini Model for Operational Reasoning",
-          isRecommended: isLatest36 || (isFlash && !isPro),
-          maxTokens: m.outputTokenLimit || 8192,
-          speedRating,
-          costRating,
-          qualityRating,
-          badgeLabel,
-          supportedCapabilities: ["Function Calling", "Structured Output", "Long Context", "Streaming"],
-        };
-      });
-
-    supported.sort((a, b) => (b.qualityRating + b.speedRating) - (a.qualityRating + a.speedRating));
-    return supported.length > 0 ? supported : getDefaultFallbackModels();
-  } catch (err) {
-    console.warn("Failed to fetch live Gemini models, using fallback list:", err);
-    return getDefaultFallbackModels();
-  }
+/** Resolve which key is actually used for a live call. Empty in demo. */
+function resolveKey(mode: AIProviderMode | undefined, userApiKey?: string): string {
+  if (mode === "personal") return userApiKey?.trim() ?? "";
+  if (mode === "env") return process.env.GEMINI_API_KEY ?? "";
+  return "";
 }
 
-export async function executePlaygroundPrompt(
-  userPrompt: string,
-  userApiKey?: string,
-  selectedModel: string = "gemini-3.6-flash",
-  providerMode: AIProviderMode = "demo"
-): Promise<string> {
-  const apiKeyToUse =
-    providerMode === "personal" && userApiKey
-      ? userApiKey
-      : providerMode === "env"
-      ? process.env.GEMINI_API_KEY || ""
-      : "";
-
-  if (providerMode === "demo" || !apiKeyToUse) {
-    return `[DEMO MODE: Simulated Response]
-
-Prompt Evaluated: "${userPrompt}"
-
-Operational Response:
-In Demo Mode, responses are generated via the local deterministic rule engine. 
-• Station A (Grill): 84% utilization.
-• Table 5 Wait Time: 12 minutes (within SLA).
-• Stock Depletion: Aged Truffle Cheese (0.8 kg remaining).
-
-To receive live LLM generation for your exact prompt, switch to "Personal Key Mode" or configure server environment variables.`;
-  }
-
-  try {
-    const genAI = new GoogleGenerativeAI(apiKeyToUse);
-    const model = genAI.getGenerativeModel({ model: selectedModel });
-    const result = await model.generateContent(userPrompt);
-    const responseText = result.response.text();
-    return `[LIVE ${selectedModel.toUpperCase()} OUTPUT]\n\n${responseText}`;
-  } catch (err: any) {
-    return `[LLM GENERATION ERROR]\nFailed to generate content: ${err.message || "Invalid request"}`;
-  }
-}
-
-function getDefaultFallbackModels(): GeminiModelInfo[] {
-  return [
-    {
-      name: "gemini-3.6-flash",
-      displayName: "Gemini 3.6 Flash",
-      description: "Next-gen operational model with ultra-fast inference and zero hallucination reasoning",
-      isRecommended: true,
-      maxTokens: 16384,
-      speedRating: 5,
-      costRating: 4,
-      qualityRating: 5,
-      badgeLabel: "⭐ Recommended by PulseOS",
-      supportedCapabilities: ["Function Calling", "Structured Output", "Long Context", "Streaming"],
-    },
-    {
-      name: "gemini-3.5-flash",
-      displayName: "Gemini 3.5 Flash",
-      description: "High performance model optimized for real-time kitchen batching and inventory analysis",
-      isRecommended: false,
-      maxTokens: 8192,
-      speedRating: 5,
-      costRating: 4,
-      qualityRating: 4,
-      badgeLabel: "🚀 Fast Operational",
-      supportedCapabilities: ["Structured Output", "Long Context"],
-    },
-    {
-      name: "gemini-3.5-flash-lite",
-      displayName: "Gemini 3.5 Flash Lite",
-      description: "Ultra lightweight model for minimum latency and minimum token costs",
-      isRecommended: false,
-      maxTokens: 4096,
-      speedRating: 5,
-      costRating: 5,
-      qualityRating: 3,
-      badgeLabel: "⚡ Ultra Low Cost",
-      supportedCapabilities: ["Structured Output"],
-    },
-  ];
-}
-
-function getOpenAIModels(): GeminiModelInfo[] {
-  return [
-    { name: "gpt-4o", displayName: "GPT-4o", description: "Flagship multimodal OpenAI model", isRecommended: true, maxTokens: 4096, speedRating: 5, costRating: 3, qualityRating: 5, badgeLabel: "⭐ Recommended OpenAI", supportedCapabilities: ["Vision", "Structured Output"] },
-    { name: "gpt-4o-mini", displayName: "GPT-4o Mini", description: "Fast, affordable OpenAI model", isRecommended: false, maxTokens: 4096, speedRating: 5, costRating: 5, qualityRating: 4, badgeLabel: "⚡ Low Cost OpenAI", supportedCapabilities: ["Structured Output"] },
-  ];
-}
-
-function getAnthropicModels(): GeminiModelInfo[] {
-  return [
-    { name: "claude-3-5-sonnet", displayName: "Claude 3.5 Sonnet", description: "Highest intelligence Claude model", isRecommended: true, maxTokens: 8192, speedRating: 4, costRating: 3, qualityRating: 5, badgeLabel: "⭐ Recommended Anthropic", supportedCapabilities: ["Deep Reasoning", "Artifacts"] },
-    { name: "claude-3-haiku", displayName: "Claude 3 Haiku", description: "Fastest lightweight Claude model", isRecommended: false, maxTokens: 4096, speedRating: 5, costRating: 5, qualityRating: 4, badgeLabel: "⚡ Fast Anthropic", supportedCapabilities: ["Structured Output"] },
-  ];
-}
-
-function getOpenRouterModels(): GeminiModelInfo[] {
-  return [
-    { name: "meta-llama/llama-3.3-70b-instruct", displayName: "Llama 3.3 70B", description: "Open weights flagship model on OpenRouter", isRecommended: true, maxTokens: 8192, speedRating: 4, costRating: 5, qualityRating: 5, badgeLabel: "⭐ Recommended Open-Source", supportedCapabilities: ["Function Calling"] },
-  ];
-}
-
-export async function runPulseAIGovernorScan(snapshot: SnapshotPayload) {
+export async function runPulseAIGovernorScan(snapshot: SnapshotPayload): Promise<GovernorResult> {
   const now = Date.now();
-  const providerMode = snapshot.providerMode || "demo";
-  const apiKeyToUse =
-    providerMode === "personal" && snapshot.userApiKey
-      ? snapshot.userApiKey
-      : providerMode === "env"
-      ? process.env.GEMINI_API_KEY || ""
-      : "";
+  const providerMode = snapshot.providerMode ?? "demo";
+  const providerType = snapshot.providerType ?? "gemini";
+  const selectedModel = snapshot.selectedModel || "gemini-3.6-flash";
+  const apiKey = resolveKey(providerMode, snapshot.userApiKey);
 
-  if (cachedScan && now - cachedScan.timestamp < ADAPTIVE_CACHE_TTL_MS) {
+  const key = cacheKey(snapshot);
+  const cached = scanCache.get(key);
+  if (cached && now - cached.timestamp < SCAN_CACHE_TTL_MS) {
     return {
-      insight: cachedScan.insight,
-      healthScore: cachedScan.healthScore,
+      insight: cached.insight,
+      healthScore: cached.healthScore,
       isCached: true,
       isFallback: false,
     };
   }
 
-  if (providerMode === "demo" || !apiKeyToUse) {
-    const fallbackInsight = generateDeterministicFallbackInsight(snapshot);
+  // Demo mode: deterministic, honest, costs nothing.
+  if (providerMode === "demo" || !apiKey) {
+    const insight = generateDeterministicFallbackInsight(snapshot);
     const health = Math.max(65, 100 - snapshot.lowInventory.length * 8 - (snapshot.kitchenLoad > 80 ? 12 : 0));
-    
-    cachedScan = { insight: fallbackInsight, healthScore: health, timestamp: now };
-    return {
-      insight: fallbackInsight,
-      healthScore: health,
-      isCached: false,
-      isFallback: true,
-    };
+    pushCache(key, { insight, healthScore: health, timestamp: now });
+    return { insight, healthScore: health, isCached: false, isFallback: true };
   }
 
+  const startedAt = performance.now();
   try {
-    const genAI = new GoogleGenerativeAI(apiKeyToUse);
-    const targetModel = snapshot.selectedModel || "gemini-3.6-flash";
-    const model = genAI.getGenerativeModel({ model: targetModel });
-
     const prompt = `You are PulseOS Operational Intelligence Governor for a high-volume restaurant.
 Given the current real-time operational snapshot:
 ${JSON.stringify(snapshot, null, 2)}
 
-Respond strictly in valid JSON format matching this schema:
+Respond strictly in valid JSON only (no markdown fences) matching this schema:
 {
   "title": "Short title describing main bottleneck or optimization opportunity",
   "problem": "Clear problem statement (What is happening right now?)",
@@ -290,71 +117,153 @@ Respond strictly in valid JSON format matching this schema:
   "kitchen_load_reduction_pct": 12,
   "confidence": 96,
   "reasoning": ["Point 1", "Point 2", "Point 3"],
-  "why_not": ["Why not alternative 1? ➔ Reason"],
+  "why_not": ["Why not alternative 1? -> Reason"],
   "healthScore": 92
 }`;
 
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
-    const cleanJson = responseText.replace(/```json/g, "").replace(/```/g, "").trim();
-    const parsed = JSON.parse(cleanJson);
-
-    const generatedInsight: AIInsight = {
-      id: `ins-gemini-${now}`,
-      type: "bottleneck",
-      title: parsed.title || "Kitchen Batching & Resource Re-allocation",
-      problem: parsed.problem || "High prep queue detected across active tables.",
-      cause: parsed.cause || "Concurrent order spikes on grill station.",
-      recommendation: parsed.recommendation || "Batch identical dishes and reassign line cook.",
-      business_impact: {
-        wait_reduction_pct: parsed.wait_reduction_pct || 15,
-        revenue_increase_val: parsed.revenue_increase_val || 2800,
-        waste_reduction_pct: parsed.waste_reduction_pct || 5,
-        kitchen_load_reduction_pct: parsed.kitchen_load_reduction_pct || 10,
-      },
-      confidence: parsed.confidence || 96,
-      reasoning: parsed.reasoning || ["Real-time station load threshold exceeded"],
-      why_not: parsed.why_not || [
-        "Why not open Line 2 Grill? ➔ Only 2 pending patty orders exist; extra line cook cost exceeds wait savings.",
-      ],
-      snapshot_version: "v182",
-      generated_ago_sec: 2,
-      created_at: "Just now",
-    };
-
-    const health = parsed.healthScore || 92;
-    cachedScan = { insight: generatedInsight, healthScore: health, timestamp: now };
+    const { text, usage } = await generate(providerType, apiKey, selectedModel, prompt);
+    const parsed = parseInsightJson(text, now);
+    const health = parsed.healthScore ?? 92;
+    const latencyMs = Math.round(performance.now() - startedAt);
+    pushCache(key, { insight: parsed.insight, healthScore: health, timestamp: now });
 
     return {
-      insight: generatedInsight,
+      insight: parsed.insight,
       healthScore: health,
       isCached: false,
       isFallback: false,
+      telemetry: {
+        usage,
+        estimatedCostInr: estimateCostInr(providerType, selectedModel, usage),
+        latencyMs,
+      },
     };
   } catch (err) {
-    console.warn("Gemini API call failed, defaulting to Rule Engine:", err);
-    const fallbackInsight = generateDeterministicFallbackInsight(snapshot);
+    // Re-throw provider errors (bad key, rate limit) so the API route can map
+    // them to a clean message. Only swallow model-parse failures into fallback.
+    if (err instanceof ProviderError) throw err;
+    console.warn("Governor scan parse/network failure, using rule engine:", err);
+    const insight = generateDeterministicFallbackInsight(snapshot);
     const health = Math.max(70, 100 - snapshot.lowInventory.length * 10);
+    pushCache(key, { insight, healthScore: health, timestamp: now });
+    return { insight, healthScore: health, isCached: false, isFallback: true };
+  }
+}
+
+export interface ChatResult {
+  text: string;
+  isFallback: boolean;
+  telemetry?: { usage: TokenUsage; estimatedCostInr: number; latencyMs: number };
+}
+
+/** One-shot advisory chat. Demo is grounded in the live snapshot; a live key
+ *  goes to the real model. Used by the AI advisor console on /ai-ops. */
+export async function runAdvisorChat(
+  question: string,
+  snapshot: SnapshotPayload
+): Promise<ChatResult> {
+  const providerMode = snapshot.providerMode ?? "demo";
+  const providerType = snapshot.providerType ?? "gemini";
+  const selectedModel = snapshot.selectedModel || "gemini-3.6-flash";
+  const apiKey = resolveKey(providerMode, snapshot.userApiKey);
+
+  if (providerMode === "demo" || !apiKey) {
+    return { text: deterministicAdvisorAnswer(question, snapshot), isFallback: true };
+  }
+
+  const startedAt = performance.now();
+  try {
+    const prompt = `You are PulseOS, an operations advisor for a high-volume restaurant.
+Answer the manager's question in 3-5 short lines, grounded ONLY in this live snapshot.
+If the snapshot does not contain the answer, say so plainly.
+
+Live operational snapshot:
+${JSON.stringify(snapshot, null, 2)}
+
+Question: ${question}`;
+    const { text, usage } = await generate(providerType, apiKey, selectedModel, prompt);
     return {
-      insight: fallbackInsight,
-      healthScore: health,
-      isCached: false,
-      isFallback: true,
+      text,
+      isFallback: false,
+      telemetry: {
+        usage,
+        estimatedCostInr: estimateCostInr(providerType, selectedModel, usage),
+        latencyMs: Math.round(performance.now() - startedAt),
+      },
+    };
+  } catch (err) {
+    if (err instanceof ProviderError) throw err;
+    return { text: deterministicAdvisorAnswer(question, snapshot), isFallback: true };
+  }
+}
+
+/** Strip ```json fences and brace-extract a JSON object. Defensive — the model
+ *  occasionally wraps output in prose. Returns a sane insight on total failure. */
+function parseInsightJson(raw: string, now: number): { insight: AIInsight; healthScore?: number } {
+  let cleaned = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+  if (cleaned.indexOf("{") !== 0) {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start >= 0 && end > start) cleaned = cleaned.slice(start, end + 1);
+  }
+  try {
+    const p = JSON.parse(cleaned);
+    const insight: AIInsight = {
+      id: `ins-live-${now}`,
+      type: "bottleneck",
+      title: typeof p.title === "string" ? p.title : "Kitchen batching & resource re-allocation",
+      problem: typeof p.problem === "string" ? p.problem : "High prep queue detected across active tables.",
+      cause: typeof p.cause === "string" ? p.cause : "Concurrent order spike on a single station.",
+      recommendation:
+        typeof p.recommendation === "string" ? p.recommendation : "Batch identical dishes and reassign a line cook.",
+      business_impact: {
+        wait_reduction_pct: num(p.wait_reduction_pct, 15),
+        revenue_increase_val: num(p.revenue_increase_val, 2800),
+        waste_reduction_pct: num(p.waste_reduction_pct, 5),
+        kitchen_load_reduction_pct: num(p.kitchen_load_reduction_pct, 10),
+      },
+      confidence: num(p.confidence, 96),
+      reasoning: Array.isArray(p.reasoning) ? p.reasoning.map(String) : ["Real-time station load threshold exceeded"],
+      why_not: Array.isArray(p.why_not) ? p.why_not.map(String) : undefined,
+      snapshot_version: "live",
+      generated_ago_sec: 0,
+      created_at: "Just now",
+    };
+    return { insight, healthScore: num(p.healthScore, 92) };
+  } catch {
+    return {
+      insight: {
+        id: `ins-live-${now}`,
+        type: "bottleneck",
+        title: "Live scan returned unparseable output",
+        problem: "The model responded, but not in the structured JSON the governor expects.",
+        cause: "Model output drifted from the requested schema.",
+        recommendation: "Re-run the audit, or switch to a model with stronger structured-output support.",
+        business_impact: { wait_reduction_pct: 0, revenue_increase_val: 0, waste_reduction_pct: 0, kitchen_load_reduction_pct: 0 },
+        confidence: 40,
+        reasoning: ["Model output failed JSON validation", "Falling back to deterministic insight instead"],
+        snapshot_version: "live",
+        generated_ago_sec: 0,
+        created_at: "Just now",
+      },
     };
   }
 }
 
+function num(v: unknown, fallback: number): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function generateDeterministicFallbackInsight(snapshot: SnapshotPayload): AIInsight {
-  const hasLowStock = snapshot.lowInventory.length > 0;
-  
-  if (hasLowStock) {
+  if (snapshot.lowInventory.length > 0) {
     return {
       id: `ins-rule-${Date.now()}`,
       type: "inventory",
-      title: `Low Stock Criticality: ${snapshot.lowInventory[0]} Depletion`,
-      problem: `${snapshot.lowInventory[0]} is below minimum safety threshold.`,
-      cause: `Unexpected Friday night order surge (+34% vs baseline).`,
-      recommendation: `Trigger express inventory replenishment & push alternative signature appetizers on Customer Menu.`,
+      title: `Low stock: ${snapshot.lowInventory[0]}`,
+      problem: `${snapshot.lowInventory[0]} is below the minimum safety threshold.`,
+      cause: "Order burn rate outpaced replenishment this service.",
+      recommendation: "Trigger express replenishment and promote an alternative high-margin item on the guest menu.",
       business_impact: {
         wait_reduction_pct: 0,
         revenue_increase_val: 4200,
@@ -363,15 +272,13 @@ function generateDeterministicFallbackInsight(snapshot: SnapshotPayload): AIInsi
       },
       confidence: 94,
       reasoning: [
-        "Rule Engine: Inventory burn rate exceeds threshold",
-        "Estimated stock depletion in < 45 minutes",
-        "Alternative item promotion provides +65% margin",
+        "Rule engine: inventory burn rate exceeds threshold",
+        `Low items right now: ${snapshot.lowInventory.join(", ") || "none"}`,
+        `${snapshot.tablesOccupied} tables occupied, ${snapshot.activeOrdersCount} active orders`,
       ],
-      why_not: [
-        "Why not stop orders for truffle pasta? ➔ Prevents revenue loss on high margin item.",
-      ],
-      snapshot_version: "v182",
-      generated_ago_sec: 2,
+      why_not: ["Why not stop orders for the affected dish? -> Protects margin on remaining stock."],
+      snapshot_version: "rule",
+      generated_ago_sec: 0,
       created_at: "Just now",
     };
   }
@@ -379,27 +286,65 @@ function generateDeterministicFallbackInsight(snapshot: SnapshotPayload): AIInsi
   return {
     id: `ins-rule-${Date.now()}`,
     type: "bottleneck",
-    title: "Kitchen Station CPU Batching Optimization",
-    problem: "Station A (Grill) experiencing elevated line cook queue times.",
-    cause: "5 Wagyu Burger orders active across Tables 2 & 5.",
-    recommendation: "Execute Smart CPU Batching: Cook all 5 Wagyu patties simultaneously.",
+    title: "Kitchen batching optimisation available",
+    problem: snapshot.activeOrdersCount > 0
+      ? "Identical dishes across active tables can be batched to cut station heat cycles."
+      : "Kitchen load is within normal range; no intervention needed right now.",
+    cause: snapshot.activeOrdersCount > 0
+      ? `${snapshot.activeOrdersCount} active orders, kitchen load at ${snapshot.kitchenLoad}%.`
+      : "Service is steady.",
+    recommendation: snapshot.activeOrdersCount > 0
+      ? "Batch identical dishes across tables before the next seating."
+      : "Hold course. Re-run this audit after the next order spike.",
     business_impact: {
-      wait_reduction_pct: 18,
-      revenue_increase_val: 3400,
+      wait_reduction_pct: snapshot.activeOrdersCount > 0 ? 18 : 0,
+      revenue_increase_val: snapshot.activeOrdersCount > 0 ? 3400 : 0,
       waste_reduction_pct: 5,
-      kitchen_load_reduction_pct: 14,
+      kitchen_load_reduction_pct: snapshot.activeOrdersCount > 0 ? 14 : 0,
     },
     confidence: 96,
     reasoning: [
-      "Rule Engine: Station A surface utilization at 88%",
-      "Identical patty sear cycles permit 5-unit batching",
-      "Reduces total station heat cycles from 4 to 1",
+      `Rule engine: kitchen load ${snapshot.kitchenLoad}%`,
+      `${snapshot.tablesOccupied} tables occupied`,
+      `${snapshot.activeOrdersCount} active orders`,
     ],
-    why_not: [
-      "Why not open Line 2 Grill? ➔ Only 2 pending patty orders exist; extra line cook cost exceeds wait savings.",
-    ],
-    snapshot_version: "v182",
-    generated_ago_sec: 2,
+    why_not: ["Why not open a second line? -> Extra staff cost exceeds the wait-time saving at this load."],
+    snapshot_version: "rule",
+    generated_ago_sec: 0,
     created_at: "Just now",
   };
+}
+
+/** Demo-mode advisor: builds a grounded answer from the live snapshot instead
+ *  of canned keyword strings. The numbers it cites are real store values. */
+function deterministicAdvisorAnswer(question: string, snapshot: SnapshotPayload): string {
+  const q = question.toLowerCase();
+  const lines: string[] = [];
+
+  if (/(stock|inventory|cheese|run ?out|low)/.test(q)) {
+    if (snapshot.lowInventory.length > 0) {
+      lines.push(`Low stock now: ${snapshot.lowInventory.join(", ")}.`);
+      lines.push("Trigger express replenishment before the next seating.");
+    } else {
+      lines.push("No items are below threshold right now.");
+    }
+  } else if (/(table|wait|slow|turn)/.test(q)) {
+    lines.push(`${snapshot.tablesOccupied} tables occupied, ${snapshot.activeOrdersCount} orders active.`);
+    lines.push(`Kitchen load is ${snapshot.kitchenLoad}%.`);
+    lines.push(snapshot.activeOrdersCount > 0
+      ? "Batch identical dishes across tables to bring wait times down."
+      : "Service is steady; no wait-time intervention needed.");
+  } else if (/(margin|profit|revenue|sell|upsell)/.test(q)) {
+    lines.push(`${snapshot.tablesOccupied} tables seated.`);
+    lines.push("Promote a high-margin item that shares an underloaded station.");
+  } else {
+    lines.push(`Demo mode: grounded answer from live state.`);
+    lines.push(`Tables occupied: ${snapshot.tablesOccupied}.`);
+    lines.push(`Active orders: ${snapshot.activeOrdersCount}. Kitchen load: ${snapshot.kitchenLoad}%.`);
+    lines.push(snapshot.lowInventory.length
+      ? `Low stock: ${snapshot.lowInventory.join(", ")}.`
+      : "Stock is within range.");
+    lines.push("Connect a provider key in Settings for live model answers.");
+  }
+  return lines.join("\n");
 }

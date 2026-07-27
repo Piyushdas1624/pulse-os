@@ -2,7 +2,7 @@
 
 import { usePulseStore } from "@/lib/store/usePulseStore";
 import type { Table, TableStatus } from "@/lib/types/pulse";
-import { Panel, Tag, Button, type Tone } from "@/components/ui/primitives";
+import { Panel, Tag, Button, cx, type Tone } from "@/components/ui/primitives";
 import { toast } from "@/components/ui/Toast";
 
 /**
@@ -128,6 +128,7 @@ export default function FloorPlanSvg() {
         {tables.map((t) => {
           const s = STATUS[t.status];
           const isSel = t.id === selectedTableId;
+          const halo = t.capacity <= 2 ? 46 : 62;
           return (
             <g
               key={t.id}
@@ -142,14 +143,25 @@ export default function FloorPlanSvg() {
                   setSelectedTableId(t.id);
                 }
               }}
-              className="origin-center cursor-pointer transition-transform duration-200 ease-out-expo hover:scale-[1.045] [transform-box:fill-box]"
+              className="group cursor-pointer"
             >
               {seats(t.capacity).map(([x, y], i) => (
                 <circle key={i} cx={x} cy={y} r={7} fill="oklch(30% 0.011 68)" opacity={0.5} />
               ))}
-              {isSel && (
-                <circle r={t.capacity <= 2 ? 46 : 62} fill="none" stroke={s.stroke} strokeWidth={2} opacity={0.7} />
-              )}
+              {/* Hover/selection halo. Previous build scaled the whole <g> via
+                  CSS transform, which collided with the SVG translate attribute
+                  and made the table jitter around the cursor. A ring outline
+                  gives the same affordance without touching the transform. */}
+              <circle
+                r={halo}
+                fill="none"
+                stroke={s.stroke}
+                strokeWidth={2}
+                className={cx(
+                  "transition-opacity duration-150 ease-out-quart",
+                  isSel ? "opacity-70" : "opacity-0 group-hover:opacity-50"
+                )}
+              />
               <Shape table={t} />
               <text y={-3} textAnchor="middle" fontSize={17} fontWeight={600} fill="oklch(96% 0.005 78)">
                 T{t.table_number}

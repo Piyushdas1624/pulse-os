@@ -1,171 +1,174 @@
 "use client";
 
+import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import AIHealthScanCard from "@/components/AIHealthScanCard";
 import AICostSavingsCard from "@/components/AICostSavingsCard";
 import AIMemoryWidget from "@/components/AIMemoryWidget";
 import AIExplainabilityModal from "@/components/AIExplainabilityModal";
-import AISettingsModal from "@/components/AISettingsModal";
 import { usePulseStore } from "@/lib/store/usePulseStore";
-import { useState } from "react";
-import { Send, Cpu, Bot, Sparkles, User, Settings } from "lucide-react";
+import { isLiveProvider } from "@/lib/ai/providerState";
+import { Panel, PanelHead, Button, Tag, cx } from "@/components/ui/primitives";
+import { ArrowRight, Send, AlertCircle } from "lucide-react";
+
+/**
+ * AI advisor. The chat console now goes through the real provider layer
+ * (sendAdvisorMessage), so demo answers are grounded in live store data and
+ * a connected key hits the real model. The old keyword-matched setTimeout
+ * canned replies are gone. Styling uses the same primitives as every other
+ * page — no glass-panel, no neon, no ALL-CAPS mono.
+ */
+
+interface Msg {
+  sender: "user" | "ai";
+  text: string;
+  fallback?: boolean;
+}
 
 export default function AIOperationsCenter() {
-  const { menuItems, orders, inventory } = usePulseStore();
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [userQuery, setUserQuery] = useState("");
-  const [messages, setMessages] = useState<Array<{ sender: "user" | "ai"; text: string }>>([
+  const governor = usePulseStore((s) => s.governor);
+  const sendAdvisorMessage = usePulseStore((s) => s.sendAdvisorMessage);
+  const live = isLiveProvider(governor);
+
+  const [messages, setMessages] = useState<Msg[]>([
     {
       sender: "ai",
-      text: "Welcome to PulseOS Operational Intelligence. I have direct access to real-time table statuses, active kitchen workloads, ingredient burn rates, and gross margins. How can I optimize your restaurant performance tonight?",
+      text: live
+        ? "Advisor connected to your model. Ask about the floor, kitchen load or stock — answers are grounded in live state."
+        : "Demo advisor. Answers are deterministic and grounded in your live floor, kitchen and stock state. Connect a provider key in Settings for live model answers.",
+      fallback: !live,
     },
   ]);
-  const [isAnswering, setIsAnswering] = useState(false);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const handleSendQuery = async (e: React.FormEvent) => {
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, busy]);
+
+  async function send(e: React.FormEvent) {
     e.preventDefault();
-    if (!userQuery.trim() || isAnswering) return;
-
-    const q = userQuery.trim();
-    setUserQuery("");
-    setMessages((prev) => [...prev, { sender: "user", text: q }]);
-    setIsAnswering(true);
-
-    setTimeout(() => {
-      let reply = "Based on current live state analysis:\n";
-      if (q.toLowerCase().includes("table") || q.toLowerCase().includes("slow") || q.toLowerCase().includes("wait")) {
-        reply += "• Table wait times elevated by 14% due to Station A Grill patty sear cycles.\n• Recommendation: Execute Smart CPU Batching on 5 Wagyu Burgers to reduce wait time by 18%.";
-      } else if (q.toLowerCase().includes("margin") || q.toLowerCase().includes("profit") || q.toLowerCase().includes("revenue")) {
-        reply += "• Highest gross margin dish tonight: Wood-Fired Burrata Pizza (74% gross margin).\n• Promoting Burrata Pizza to incoming guests can increase tonight's gross revenue by ₹4,800.";
-      } else if (q.toLowerCase().includes("stock") || q.toLowerCase().includes("inventory") || q.toLowerCase().includes("cheese")) {
-        reply += "• Aged Truffle Cheese stock is at 0.8 kg (estimated depletion in 38 mins).\n• Triggering express reorder prevents a potential revenue loss of ₹4,800.";
-      } else {
-        reply += `• Kitchen load is currently at 84% utilization.\n• Active Orders: ${orders.length} orders.\n• PulseAI Governor recommends maintaining Smart CPU Batching to optimize prep speed.`;
-      }
-
-      setMessages((prev) => [...prev, { sender: "ai", text: reply }]);
-      setIsAnswering(false);
-    }, 800);
-  };
+    const q = input.trim();
+    if (!q || busy) return;
+    setInput("");
+    setMessages((m) => [...m, { sender: "user", text: q }]);
+    setBusy(true);
+    const reply = await sendAdvisorMessage(q);
+    setMessages((m) => [
+      ...m,
+      { sender: "ai", text: reply, fallback: governor.is_offline_fallback },
+    ]);
+    setBusy(false);
+  }
 
   return (
-    <div className="min-h-screen bg-obsidian-950 text-slate-100 flex flex-col font-sans pb-16">
+    <>
       <Navbar />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-8">
-        
-        {/* Upper Header Control Bar for AI Settings */}
-        <div className="flex items-center justify-between pb-2 border-b border-white/5">
-          <div className="flex items-center space-x-2 font-mono text-xs text-slate-400">
-            <Cpu className="w-4 h-4 text-pulse-violet" />
-            <span>PULSE AI PROVIDER MANAGER</span>
+      <main className="mx-auto max-w-[1360px] px-6 pb-24 pt-12 lg:px-12">
+        <div className="mb-8 flex flex-wrap items-end gap-4">
+          <div>
+            <div className="eyebrow mb-2">Advisor</div>
+            <h1 className="text-[2.125rem]">Operations intelligence</h1>
+            <p className="mt-2 max-w-[58ch] text-sm text-ink-subtle">
+              Audit, telemetry and a grounded advisor. {live
+                ? "Live calls run against your connected model."
+                : "Running in demo — deterministic, grounded in live store data."}
+            </p>
           </div>
-
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="px-3 py-1.5 rounded-xl bg-obsidian-900 border border-white/10 hover:border-pulse-violet text-slate-300 hover:text-white font-mono text-xs flex items-center space-x-1.5 transition-all shadow-md"
-          >
-            <Settings className="w-3.5 h-3.5 text-pulse-violet" />
-            <span>AI Settings & Models</span>
-          </button>
+          <Button variant="ghost" className="ml-auto" onClick={() => (window.location.href = "/settings")}>
+            Configure provider <ArrowRight size={15} />
+          </Button>
         </div>
 
-        {/* Layer 3: OPTIMIZE - Primary AI Health Scan & Executive Audit */}
-        <AIHealthScanCard />
-
-        {/* Layer 4: OPERATE EFFICIENTLY - PulseAI Governor Telemetry Widget */}
-        <AICostSavingsCard />
-
-        {/* Grid: Grounded AI Advisor & Operational AI Memory */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
-          {/* Grounded Gemini Conversational Console */}
-          <div className="lg:col-span-2 glass-panel p-6 rounded-2xl border border-white/10 flex flex-col h-[480px]">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-white/10">
-              <div className="flex items-center space-x-2">
-                <Bot className="w-5 h-5 text-pulse-cyan" />
-                <h3 className="font-bold text-white text-base">Grounded Gemini AI Operational Advisor</h3>
-              </div>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-pulse-cyan/10 text-pulse-cyan border border-pulse-cyan/20 flex items-center gap-1">
-                <Sparkles className="w-3 h-3" />
-                Zero Hallucinations
-              </span>
-            </div>
-
-            {/* Chat History */}
-            <div className="flex-1 overflow-y-auto space-y-3 pr-2 mb-4">
-              {messages.map((m, idx) => (
-                <div
-                  key={idx}
-                  className={`flex items-start space-x-3 text-xs ${
-                    m.sender === "user" ? "flex-row-reverse space-x-reverse" : ""
-                  }`}
-                >
-                  <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
-                      m.sender === "user"
-                        ? "bg-pulse-cyan text-obsidian-950"
-                        : "bg-pulse-violet text-white"
-                    }`}
-                  >
-                    {m.sender === "user" ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                  </div>
-
-                  <div
-                    className={`p-3.5 rounded-xl max-w-[85%] leading-relaxed ${
-                      m.sender === "user"
-                        ? "bg-pulse-cyan/20 border border-pulse-cyan/30 text-white"
-                        : "bg-obsidian-900 border border-white/10 text-slate-200"
-                    }`}
-                  >
-                    <p className="whitespace-pre-line">{m.text}</p>
-                  </div>
-                </div>
-              ))}
-              {isAnswering && (
-                <div className="flex items-center space-x-2 text-xs font-mono text-pulse-cyan animate-pulse">
-                  <Bot className="w-4 h-4" />
-                  <span>PulseAI evaluating operational matrix...</span>
-                </div>
-              )}
-            </div>
-
-            {/* Query Form */}
-            <form onSubmit={handleSendQuery} className="flex items-center space-x-2">
-              <input
-                type="text"
-                value={userQuery}
-                onChange={(e) => setUserQuery(e.target.value)}
-                placeholder="Ask operational question (e.g. 'Why are tables slow?' or 'Highest margin item?')..."
-                className="flex-1 bg-obsidian-950 px-4 py-2.5 rounded-xl border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-pulse-cyan transition-all"
-              />
-              <button
-                type="submit"
-                disabled={isAnswering}
-                className="px-4 py-2.5 rounded-xl bg-pulse-cyan text-obsidian-950 font-bold text-xs hover:bg-pulse-cyan/90 transition-all flex items-center space-x-1.5"
-              >
-                <span>Ask</span>
-                <Send className="w-3.5 h-3.5" />
-              </button>
-            </form>
+        <div className="grid gap-6 lg:grid-cols-[1.35fr_1fr]">
+          {/* Left column: audit + telemetry */}
+          <div className="flex flex-col gap-6">
+            <AIHealthScanCard />
+            <AICostSavingsCard />
           </div>
 
-          {/* Operational AI Memory Log */}
-          <div>
+          {/* Right column: chat console (kept high so the input is reachable
+              without double-scroll — errors.md 4.3) */}
+          <div className="flex flex-col gap-6">
+            <Panel className="flex h-[560px] flex-col">
+              <PanelHead
+                title="Ask the advisor"
+                sub={live ? governor.selected_model : "deterministic"}
+                action={!live ? <Tag tone="busy">Demo</Tag> : <Tag tone="ok">Live</Tag>}
+              />
+
+              <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-5">
+                {messages.map((m, i) => (
+                  <div
+                    key={i}
+                    className={cx("flex", m.sender === "user" ? "justify-end" : "justify-start")}
+                  >
+                    <div
+                      className={cx(
+                        "max-w-[88%] whitespace-pre-line rounded-lg border px-3.5 py-2.5 text-sm leading-relaxed",
+                        m.sender === "user"
+                          ? "border-line-loud bg-obsidian-800"
+                          : "border-line-soft bg-obsidian-850"
+                      )}
+                    >
+                      {m.text}
+                      {m.fallback && m.sender === "ai" && (
+                        <span className="mt-1.5 block text-[11px] text-ink-subtle">
+                          Deterministic answer · connect a key for live model output
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {busy && (
+                  <div className="flex items-center gap-2 text-sm text-ink-subtle">
+                    <span className="flex gap-1">
+                      <i className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-subtle" />
+                      <i className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-subtle [animation-delay:120ms]" />
+                      <i className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-subtle [animation-delay:240ms]" />
+                    </span>
+                    {live ? "Model is thinking…" : "Building grounded answer…"}
+                  </div>
+                )}
+              </div>
+
+              <form onSubmit={send} className="border-t border-line-soft p-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    placeholder="Ask about wait times, stock, or what to batch…"
+                    aria-label="Ask the advisor"
+                    className="flex-1 rounded border border-line bg-obsidian-850 px-3.5 py-2.5 text-sm focus:border-line-loud focus:outline-none"
+                  />
+                  <Button type="submit" variant="primary" size="sm" disabled={busy || !input.trim()}>
+                    <Send size={14} /> Send
+                  </Button>
+                </div>
+              </form>
+            </Panel>
+
+            {governor.last_error && (
+              <div className="flex items-start gap-2.5 rounded-lg border border-state-riskDim bg-state-riskDim/35 px-4 py-3 text-sm text-state-risk">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <div>
+                  <div className="font-semibold">Last request failed</div>
+                  <div className="text-state-risk/90">{governor.last_error}</div>
+                  <Link href="/settings" className="mt-1 inline-block text-xs font-semibold underline underline-offset-4">
+                    Check provider settings
+                  </Link>
+                </div>
+              </div>
+            )}
+
             <AIMemoryWidget />
           </div>
         </div>
-
       </main>
 
-      {/* Explainability Modal */}
       <AIExplainabilityModal />
-
-      {/* AI Provider & Model Settings Modal */}
-      <AISettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-      />
-    </div>
+    </>
   );
 }
