@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Shield, XCircle, CheckCircle2, Loader2, KeyRound, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import { ProtectedRoute } from "@/lib/firebase/ProtectedRoute";
 import { usePulseStore } from "@/lib/store/usePulseStore";
 import {
   applyProviderConfig,
@@ -189,6 +190,7 @@ export default function SettingsPage() {
   const providerMeta = PROVIDERS.find((p) => p.id === governor.provider_type)!;
 
   return (
+    <ProtectedRoute allowedRoles={["owner", "manager"]}>
     <>
       <Navbar />
       <main className="mx-auto max-w-[1360px] px-6 pb-24 pt-12 lg:px-12">
@@ -433,6 +435,7 @@ export default function SettingsPage() {
         </div>
       </main>
     </>
+    </ProtectedRoute>
   );
 }
 

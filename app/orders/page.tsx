@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, ChevronDown, ChevronUp, Receipt } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import { ProtectedRoute } from "@/lib/firebase/ProtectedRoute";
 import { usePulseStore } from "@/lib/store/usePulseStore";
 import { Panel, PanelHead, Button, Tag, StatStrip, Stat, EmptyState, cx } from "@/components/ui/primitives";
 import { Order } from "@/lib/types/pulse";
@@ -45,6 +46,7 @@ export default function OrdersPage() {
   }, [orders, activeTab, searchQuery]);
 
   return (
+    <ProtectedRoute allowedRoles={["owner", "manager", "kitchen_staff"]}>
     <>
       <Navbar />
       <main className="mx-auto max-w-[1360px] px-6 pb-24 pt-12 lg:px-12">
@@ -112,6 +114,7 @@ export default function OrdersPage() {
         </Panel>
       </main>
     </>
+    </ProtectedRoute>
   );
 }
 

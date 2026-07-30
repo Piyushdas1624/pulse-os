@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
+import { ProtectedRoute } from "@/lib/firebase/ProtectedRoute";
 import FloorPlanSvg from "@/components/FloorPlanSvg";
 import OperationalKPIs from "@/components/OperationalKPIs";
 import KitchenCPUScheduler from "@/components/KitchenCPUScheduler";
@@ -13,6 +14,7 @@ export default function OperationsPage() {
   const router = useRouter();
 
   return (
+    <ProtectedRoute allowedRoles={["owner", "manager", "kitchen_staff"]}>
     <>
       <Navbar />
       <main className="mx-auto max-w-[1360px] px-6 pb-24 pt-12 lg:px-12">
@@ -43,5 +45,6 @@ export default function OperationsPage() {
         </div>
       </main>
     </>
+    </ProtectedRoute>
   );
 }

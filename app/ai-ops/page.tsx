@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import { ProtectedRoute } from "@/lib/firebase/ProtectedRoute";
 import AIHealthScanCard from "@/components/AIHealthScanCard";
 import AICostSavingsCard from "@/components/AICostSavingsCard";
 import AIMemoryWidget from "@/components/AIMemoryWidget";
@@ -64,6 +65,7 @@ export default function AIOperationsCenter() {
   }
 
   return (
+    <ProtectedRoute allowedRoles={["owner", "manager"]}>
     <>
       <Navbar />
       <main className="mx-auto max-w-[1360px] px-6 pb-24 pt-12 lg:px-12">
@@ -170,5 +172,6 @@ export default function AIOperationsCenter() {
 
       <AIExplainabilityModal />
     </>
+    </ProtectedRoute>
   );
 }

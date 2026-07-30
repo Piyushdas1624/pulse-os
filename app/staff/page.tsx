@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, User, Mail, Phone, Clock, Star, Trash2, X } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import { ProtectedRoute } from "@/lib/firebase/ProtectedRoute";
 import { usePulseStore } from "@/lib/store/usePulseStore";
 import { Panel, PanelHead, Button, Tag, StatStrip, Stat, cx } from "@/components/ui/primitives";
 import { StaffMember } from "@/lib/types/pulse";
@@ -18,6 +19,7 @@ export default function StaffPage() {
   const onBreak = staff.filter((s) => s.shift_status === "break").length;
 
   return (
+    <ProtectedRoute allowedRoles={["owner", "manager"]}>
     <>
       <Navbar />
       <main className="mx-auto max-w-[1360px] px-6 pb-24 pt-12 lg:px-12">
@@ -61,6 +63,7 @@ export default function StaffPage() {
         )}
       </AnimatePresence>
     </>
+    </ProtectedRoute>
   );
 }
 

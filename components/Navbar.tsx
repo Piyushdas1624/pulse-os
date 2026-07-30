@@ -6,16 +6,19 @@ import { Activity, LogOut, User, KeyRound } from "lucide-react";
 import { usePulseStore } from "@/lib/store/usePulseStore";
 import { isLiveProvider, activeModelLabel } from "@/lib/ai/providerState";
 import { Pill, Tag, cx } from "@/components/ui/primitives";
-import { useAuth } from "@/lib/firebase/AuthContext";
+import { useAuth, UserRole } from "@/lib/firebase/AuthContext";
 
-const LINKS = [
-  { href: "/", label: "Overview" },
-  { href: "/operations", label: "Operations" },
-  { href: "/staff", label: "Staff" },
-  { href: "/orders", label: "Orders" },
-  { href: "/customer", label: "Guest ordering" },
-  { href: "/ai-ops", label: "AI advisor" },
-  { href: "/settings", label: "Settings" },
+type NavLink = { href: string; label: string; roles: UserRole[] };
+
+const LINKS: NavLink[] = [
+  { href: "/", label: "Overview", roles: ["owner", "manager", "kitchen_staff"] },
+  { href: "/operations", label: "Operations", roles: ["owner", "manager", "kitchen_staff"] },
+  { href: "/orders", label: "Orders", roles: ["owner", "manager", "kitchen_staff"] },
+  { href: "/staff", label: "Staff", roles: ["owner", "manager"] },
+  { href: "/customer", label: "Guest ordering", roles: ["owner", "manager", "kitchen_staff", "customer"] },
+  { href: "/qr", label: "QR codes", roles: ["owner", "manager"] },
+  { href: "/ai-ops", label: "AI advisor", roles: ["owner", "manager"] },
+  { href: "/settings", label: "Settings", roles: ["owner", "manager"] },
 ];
 
 export default function Navbar() {
@@ -25,6 +28,8 @@ export default function Navbar() {
 
   // reads the store, same as every other surface. no local copy, no drift.
   const live = isLiveProvider(governor);
+  const role = profile?.role;
+  const visibleLinks = role ? LINKS.filter((l) => l.roles.includes(role)) : [];
 
   return (
     <header className="sticky top-0 z-20 border-b border-line-soft bg-obsidian-900">
@@ -39,7 +44,7 @@ export default function Navbar() {
         </Link>
 
         <nav className="flex flex-1 items-center gap-1 overflow-x-auto" aria-label="Primary">
-          {LINKS.map((l) => {
+          {visibleLinks.map((l) => {
             const active = pathname === l.href;
             return (
               <Link
@@ -72,7 +77,7 @@ export default function Navbar() {
                   {profile?.displayName || user.displayName || user.email?.split("@")[0] || "User"}
                 </span>
                 <span className="text-[10px] uppercase tracking-wider text-ink-subtle">
-                  {profile?.role || "Manager"}
+                  {profile?.role || "guest"}
                 </span>
               </div>
               <button

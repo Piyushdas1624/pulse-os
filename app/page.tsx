@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, ArrowRight } from "lucide-react";
 import Navbar from "@/components/Navbar";
+import { ProtectedRoute } from "@/lib/firebase/ProtectedRoute";
 import OperationalKPIs from "@/components/OperationalKPIs";
 import LiveEventTimeline from "@/components/LiveEventTimeline";
 import { usePulseStore } from "@/lib/store/usePulseStore";
@@ -30,6 +31,7 @@ export default function Home() {
   const risk = getComputedRiskLevel();
 
   return (
+    <ProtectedRoute allowedRoles={["owner", "manager", "kitchen_staff"]}>
     <>
       <Navbar />
       <main className="mx-auto max-w-[1360px] px-6 pb-24 pt-12 lg:px-12">
@@ -143,6 +145,7 @@ export default function Home() {
         </div>
       </main>
     </>
+    </ProtectedRoute>
   );
 }
 
