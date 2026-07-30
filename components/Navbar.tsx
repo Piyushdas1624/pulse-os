@@ -72,7 +72,9 @@ export default function Navbar() {
 
         <div className="flex shrink-0 items-center gap-3">
           <Pill tone={live ? "live" : "demo"}>
-            {live ? `${activeModelLabel(governor)} · live` : "Demo mode"}
+            <span className="block max-w-[120px] truncate text-[10px]">
+              {live ? `${activeModelLabel(governor)} · live` : "Demo mode"}
+            </span>
           </Pill>
 
           {user ? (
