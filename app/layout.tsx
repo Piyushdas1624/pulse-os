@@ -4,6 +4,7 @@ import "./globals.css";
 import GovernorHydrator from "@/components/GovernorHydrator";
 import { ToastHost } from "@/components/ui/Toast";
 import { AuthProvider } from "@/lib/firebase/AuthContext";
+import { RolePickerModal } from "@/lib/firebase/RolePickerModal";
 
 /* One family, three weights. Self-hosted by next/font, zero layout shift. */
 const sans = Instrument_Sans({
@@ -31,6 +32,7 @@ export default function RootLayout({
               silently resets the app to Demo. */}
           <GovernorHydrator />
           {children}
+          <RolePickerModal />
           <ToastHost />
         </AuthProvider>
       </body>
