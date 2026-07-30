@@ -1,0 +1,12 @@
+{
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "phone": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "PulseOS",
+        "supportEmail": "piyushdas1624@gmail.com"
+      }
+    }
+  }
+}

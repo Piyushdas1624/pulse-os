@@ -11,6 +11,7 @@ import {
   GovernorState,
   AIBudgetMode,
   TableStatus,
+  StaffMember,
 } from "../types/pulse";
 
 interface PulseState {
@@ -23,6 +24,7 @@ interface PulseState {
   aiInsights: AIInsight[];
   aiMemory: AIMemoryItem[];
   governor: GovernorState;
+  staff: StaffMember[];
   
   selectedTableId: string | null;
   activeRole: "customer" | "staff" | "manager";
@@ -34,6 +36,11 @@ interface PulseState {
   setExplainModalInsight: (insight: AIInsight | null) => void;
   setAIBudgetMode: (mode: AIBudgetMode) => void;
   setAIConfiguration: (config: Partial<GovernorState>) => void;
+  
+  addStaff: (staff: Omit<StaffMember, 'id'>) => void;
+  updateStaff: (id: string, updates: Partial<StaffMember>) => void;
+  toggleStaffStatus: (id: string) => void;
+  removeStaff: (id: string) => void;
   
   placeOrder: (tableId: string, items: { menuItemId: string; qty: number }[], customerName?: string) => void;
   advanceKitchenTicket: (ticketId: string) => void;
@@ -193,6 +200,15 @@ const INITIAL_MEMORY: AIMemoryItem[] = [
   { id: "mem-2", timestamp: "17:45 PM", title: "Promoted Chianti Pairing on Table 4", action_taken: "Smart Recommendation Engine", outcome_metric: "Average Check Size", delta_pct: +14 },
 ];
 
+const INITIAL_STAFF: StaffMember[] = [
+  { id: "s1", full_name: "Marcus Chen", email: "marcus@pulseos.com", role: "head_chef", hourly_rate: 450, shift_status: "on_duty", performance_rating: 4.8, shift_start: "14:00" },
+  { id: "s2", full_name: "Priya Sharma", email: "priya@pulseos.com", role: "sous_chef", hourly_rate: 320, shift_status: "on_duty", performance_rating: 4.9, shift_start: "15:00" },
+  { id: "s3", full_name: "Raj Patel", email: "raj@pulseos.com", role: "line_cook", hourly_rate: 220, shift_status: "on_duty", performance_rating: 4.2, shift_start: "16:00" },
+  { id: "s4", full_name: "Sofia Martinez", email: "sofia@pulseos.com", role: "sommelier", hourly_rate: 350, shift_status: "off_duty", performance_rating: 4.7 },
+  { id: "s5", full_name: "Arjun Mehra", email: "arjun@pulseos.com", role: "floor_captain", hourly_rate: 280, shift_status: "break", performance_rating: 4.5, shift_start: "14:30" },
+  { id: "s6", full_name: "Anita Joshi", email: "anita@pulseos.com", role: "floor_waiter", hourly_rate: 180, shift_status: "on_duty", performance_rating: 4.4, shift_start: "17:00" },
+];
+
 /** Route a menu item to a kitchen station by category + name. Replaces the
  *  old "Burger -> Station A, everything else -> Station B" rule that piled
  *  pizza, calamari, tiramisu and wine all onto Station B and starved C. */
@@ -219,6 +235,7 @@ export const usePulseStore = create<PulseState>((set, get) => ({
   liveEvents: INITIAL_EVENTS,
   aiInsights: INITIAL_INSIGHTS,
   aiMemory: INITIAL_MEMORY,
+  staff: INITIAL_STAFF,
   governor: {
     provider_type: "gemini",
     provider_mode: "demo",
@@ -253,6 +270,34 @@ export const usePulseStore = create<PulseState>((set, get) => ({
     })),
   setAIConfiguration: (config) =>
     set((state) => ({ governor: { ...state.governor, ...config } })),
+
+  addStaff: (staffData) =>
+    set((state) => ({
+      staff: [{ ...staffData, id: `s-${Date.now()}` }, ...state.staff],
+    })),
+  updateStaff: (id, updates) =>
+    set((state) => ({
+      staff: state.staff.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+    })),
+  toggleStaffStatus: (id) =>
+    set((state) => ({
+      staff: state.staff.map((s) => {
+        if (s.id === id) {
+          const nextStatus =
+            s.shift_status === "on_duty"
+              ? "break"
+              : s.shift_status === "break"
+              ? "off_duty"
+              : "on_duty";
+          return { ...s, shift_status: nextStatus };
+        }
+        return s;
+      }),
+    })),
+  removeStaff: (id) =>
+    set((state) => ({
+      staff: state.staff.filter((s) => s.id !== id),
+    })),
 
   // Dynamic Live State Computation Selectors
   getComputedHealthScore: () => {

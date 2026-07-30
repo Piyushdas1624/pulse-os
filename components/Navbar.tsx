@@ -2,14 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity } from "lucide-react";
+import { Activity, LogOut, User, KeyRound } from "lucide-react";
 import { usePulseStore } from "@/lib/store/usePulseStore";
 import { isLiveProvider, activeModelLabel } from "@/lib/ai/providerState";
-import { Pill, cx } from "@/components/ui/primitives";
+import { Pill, Tag, cx } from "@/components/ui/primitives";
+import { useAuth } from "@/lib/firebase/AuthContext";
 
 const LINKS = [
   { href: "/", label: "Overview" },
   { href: "/operations", label: "Operations" },
+  { href: "/staff", label: "Staff" },
+  { href: "/orders", label: "Orders" },
   { href: "/customer", label: "Guest ordering" },
   { href: "/ai-ops", label: "AI advisor" },
   { href: "/settings", label: "Settings" },
@@ -18,6 +21,7 @@ const LINKS = [
 export default function Navbar() {
   const pathname = usePathname();
   const governor = usePulseStore((s) => s.governor);
+  const { user, profile, signOut } = useAuth();
 
   // reads the store, same as every other surface. no local copy, no drift.
   const live = isLiveProvider(governor);
@@ -60,8 +64,37 @@ export default function Navbar() {
           <Pill tone={live ? "live" : "demo"}>
             {live ? `${activeModelLabel(governor)} · live` : "Demo mode"}
           </Pill>
+
+          {user ? (
+            <div className="flex items-center gap-2.5 border-l border-line-soft pl-3">
+              <div className="flex flex-col text-right">
+                <span className="text-xs font-semibold text-ink">
+                  {profile?.displayName || user.displayName || user.email?.split("@")[0] || "User"}
+                </span>
+                <span className="text-[10px] uppercase tracking-wider text-ink-subtle">
+                  {profile?.role || "Manager"}
+                </span>
+              </div>
+              <button
+                onClick={signOut}
+                title="Sign Out"
+                className="grid h-8 w-8 place-items-center rounded-lg border border-line-soft bg-obsidian-800 text-ink-muted transition-colors hover:border-line-loud hover:text-ink"
+              >
+                <LogOut size={14} />
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-1.5 rounded-md bg-ink px-3 py-1.5 text-xs font-semibold text-obsidian-900 transition-all hover:bg-white active:scale-[0.985]"
+            >
+              <KeyRound size={13} />
+              Sign In
+            </Link>
+          )}
         </div>
       </div>
     </header>
   );
 }
+

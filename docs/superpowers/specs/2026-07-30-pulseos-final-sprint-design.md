@@ -33,6 +33,23 @@
 - On registration, gate the account behind a 6-digit OTP:
   - Server route `/api/auth/email-otp` (crypto-random 6-digit code) stores it hashed + TTL in a Firestore `email_otps` doc keyed by email.
   - **If `RESEND_API_KEY` is set** → send a real email via Resend (free, 100/day).
+  - Use `re_xxxxxxxxx` placeholder for Resend API Key.
+
+Ask the user to replace `re_xxxxxxxxx` with their real API key.
+
+```javascript
+import { Resend } from 'resend';
+
+const resend = new Resend('re_xxxxxxxxx');
+
+resend.emails.send({
+  from: 'onboarding@resend.dev',
+  to: 'piyushgsc1@gmail.com',
+  subject: 'Hello World',
+  html: '<p>Congrats on sending your <strong>first email</strong>!</p>'
+});
+```
+"
   - **Otherwise (Demo mode)** → display the code on-screen in a clearly labeled "Demo mode" banner.
   - Additionally fire Firebase's native `sendEmailVerification` in the background so a real email genuinely lands.
 - Verification logic is real; delivery is demo-safe. This satisfies the "Email & Password with OTP (or equivalent verification)" requirement honestly.

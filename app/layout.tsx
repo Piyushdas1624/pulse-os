@@ -3,6 +3,7 @@ import { Instrument_Sans } from "next/font/google";
 import "./globals.css";
 import GovernorHydrator from "@/components/GovernorHydrator";
 import { ToastHost } from "@/components/ui/Toast";
+import { AuthProvider } from "@/lib/firebase/AuthContext";
 
 /* One family, three weights. Self-hosted by next/font, zero layout shift. */
 const sans = Instrument_Sans({
@@ -24,13 +25,16 @@ export default function RootLayout({
   return (
     <html lang="en" className={`dark ${sans.variable}`}>
       <body className="font-sans antialiased">
-        {/* Reads the encrypted provider config out of localStorage and pushes
-            it into the Zustand store once, on mount. Without this a refresh
-            silently resets the app to Demo. */}
-        <GovernorHydrator />
-        {children}
-        <ToastHost />
+        <AuthProvider>
+          {/* Reads the encrypted provider config out of localStorage and pushes
+              it into the Zustand store once, on mount. Without this a refresh
+              silently resets the app to Demo. */}
+          <GovernorHydrator />
+          {children}
+          <ToastHost />
+        </AuthProvider>
       </body>
     </html>
   );
 }
+

@@ -168,3 +168,17 @@ export interface GovernorState {
    *  never silently returns to idle with zero feedback. */
   last_error?: string;
 }
+
+export interface StaffMember {
+  id: string;
+  full_name: string;
+  email: string;
+  phone?: string;
+  role: 'head_chef' | 'sous_chef' | 'line_cook' | 'floor_waiter' | 'floor_captain' | 'sommelier' | 'host' | 'general_manager';
+  hourly_rate: number;
+  shift_status: 'on_duty' | 'off_duty' | 'break';
+  performance_rating: number;
+  shift_start?: string;
+  shift_end?: string;
+  avatar_url?: string;
+}
