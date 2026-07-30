@@ -46,6 +46,7 @@ interface PulseState {
   removeStaff: (id: string) => void;
   
   placeOrder: (tableId: string, items: { menuItemId: string; qty: number }[], customerName?: string) => void;
+  seatTable: (tableId: string) => void;
   advanceKitchenTicket: (ticketId: string) => void;
   clearTable: (tableId: string) => void;
   /** Checkout: compute GST + tip, push a paid OrderHistoryItem, clear table. */
@@ -510,6 +511,22 @@ export const usePulseStore = create<PulseState>((set, get) => ({
       };
       return { liveEvents: [newEvent, ...state.liveEvents.slice(0, 19)] };
     }),
+
+  seatTable: (tableId) => set((state) => ({
+    tables: state.tables.map((t) =>
+      t.id === tableId
+        ? {
+            ...t,
+            status: "occupied" as const,
+            seated_at: new Date().toLocaleTimeString("en-IN", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            }),
+          }
+        : t
+    ),
+  })),
 
   placeOrder: (tableId, items, customerName = "Guest") => {
     const state = get();

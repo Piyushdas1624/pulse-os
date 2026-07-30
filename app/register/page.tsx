@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -41,6 +41,9 @@ export default function RegisterPage() {
   const [otpStep, setOtpStep] = useState<"form" | "verify">("form");
   const [otpCode, setOtpCode] = useState("");
   const [demoCode, setDemoCode] = useState<string | null>(null);
+  // Hydration guard: don't render dynamic OTP banner until client is mounted
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   /** Phase 1: validate the form, then send a verification code. */
   const handleSendCode = async (e: FormEvent) => {
@@ -148,16 +151,15 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* Demo-mode OTP banner (pratfall effect: transparency builds trust) */}
-          {otpStep === "verify" && demoCode && (
-            <div className="mb-4 rounded-lg bg-state-busyDim px-3 py-2.5 text-sm text-state-busy">
-              <p className="font-semibold">Demo mode — email not configured</p>
-              <p className="mt-0.5 text-ink-muted">
-                Your verification code is{" "}
-                <span className="font-mono text-base font-bold tracking-[0.2em] text-ink">
-                  {demoCode}
-                </span>
+          {/* Demo-mode OTP banner — only render on client to avoid hydration mismatch */}
+          {mounted && otpStep === "verify" && demoCode && (
+            <div className="mb-4 rounded-lg border border-state-busy/40 bg-state-busyDim px-4 py-3 text-sm">
+              <p className="font-semibold text-state-busy">📨 Demo mode — email not sent</p>
+              <p className="mt-1 text-ink-muted">Your verification code is</p>
+              <p className="mt-1 font-mono text-2xl font-bold tracking-[0.3em] text-ink" suppressHydrationWarning>
+                {demoCode}
               </p>
+              <p className="mt-1 text-xs text-ink-subtle">Copy it and paste it in the field below.</p>
             </div>
           )}
 

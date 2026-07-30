@@ -63,6 +63,7 @@ function CustomerPortalInner() {
     staff,
     selectedTableId,
     setSelectedTableId,
+    seatTable,
   } = usePulseStore();
 
   const router = useRouter();
@@ -83,12 +84,18 @@ function CustomerPortalInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scannedTableNum]);
 
+  // Default to first available table (not pre-occupied by demo data)
+  const firstAvailable = tables.find((t) => t.status === "available") ?? tables[0];
   const currentTable =
-    tables.find((t) => t.id === selectedTableId) ?? tables[4]; // Table 5 default
+    tables.find((t) => t.id === selectedTableId) ?? firstAvailable;
 
-  // ALL non-completed orders for this table (not just the first)
+  // Only show orders placed this session (exclude seeded demo orders)
   const tableOrders = orders.filter(
-    (o) => o.table_id === currentTable.id && o.status !== "completed" && o.status !== "cancelled"
+    (o) =>
+      o.table_id === currentTable.id &&
+      o.status !== "completed" &&
+      o.status !== "cancelled" &&
+      !o.id.startsWith("ord-demo") // skip seed data
   );
   const activeOrder = tableOrders[0]; // for status display
 
@@ -138,9 +145,11 @@ function CustomerPortalInner() {
     setTimeout(() => setJustOrdered(false), 1800);
   };
 
-  // Switch table and update URL
+  // Switch table, seat it, and update URL
   const handleTableSelect = (tableId: string, tableNumber: number) => {
     setSelectedTableId(tableId);
+    // Seat the table → owner sees it go from 'available' to 'occupied' in real-time
+    seatTable(tableId);
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("table", String(tableNumber));

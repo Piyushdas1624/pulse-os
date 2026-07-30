@@ -53,6 +53,11 @@ export function ProtectedRoute({
   }
 
   if (role && !allowedRoles.includes(role)) {
+    // Customers visiting staff-only pages get sent straight to the guest menu.
+    if (role === "customer") {
+      router.replace("/customer");
+      return null;
+    }
     return (
       <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center gap-3 px-6 text-center">
         <span className="grid h-12 w-12 place-items-center rounded-full bg-state-riskDim text-state-risk">
@@ -60,7 +65,7 @@ export function ProtectedRoute({
         </span>
         <h2 className="text-lg font-semibold">No access</h2>
         <p className="text-sm text-ink-muted">
-          Your role (<span className="font-medium text-ink">{role}</span>) can't
+          Your role (<span className="font-medium text-ink">{role}</span>) can&apos;t
           reach this page. Switch accounts or head back to the guest menu.
         </p>
         <a
