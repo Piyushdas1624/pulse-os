@@ -18,6 +18,9 @@ export type AIBudgetMode = "economy" | "balanced" | "performance";
 export type AIProviderMode = "demo" | "personal" | "env";
 export type AIProviderType = "gemini" | "openai" | "anthropic" | "openrouter";
 
+/** Auth/access role. Distinct from StaffMember.role (the staff job title). */
+export type Role = "owner" | "manager" | "kitchen_staff" | "customer";
+
 export interface GeminiModelInfo {
   name: string;
   displayName: string;
@@ -181,4 +184,31 @@ export interface StaffMember {
   shift_start?: string;
   shift_end?: string;
   avatar_url?: string;
+}
+
+/** Payment + tax/tip breakdown for a checkout. */
+export interface PaymentInfo {
+  method: "upi" | "card" | "cash";
+  subtotal: number;
+  tax_amount: number;       // GST 18%
+  tip_amount: number;
+  tip_percent: number;
+  grand_total: number;
+  status: "unpaid" | "paid" | "refunded";
+  paid_at?: string;
+}
+
+/** Persisted, fully-paid or in-progress order for the history view. */
+export interface OrderHistoryItem {
+  order_id: string;
+  table_number: number;
+  customer_name: string;
+  items: { name: string; qty: number; price: number }[];
+  total_amount: number;
+  tax_amount: number;
+  tip_amount: number;
+  payment_status: PaymentInfo["status"];
+  payment_method?: PaymentInfo["method"];
+  created_at: string;
+  completed_at?: string;
 }
