@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useRef,
   ReactNode,
   useCallback,
 } from "react";
@@ -82,10 +83,17 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 /* ------------------------------------------------------------------ */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [needsRoleSelection, setNeedsRoleSelection] = useState(false);
+  // Guards against the role picker re-prompting on every onAuthStateChanged
+  // re-fire (token refresh, tab refocus, etc.). Once true for a session, it
+  // stays true until signOut. Firestore's eventual consistency + repeated
+  // auth callbacks otherwise re-read a doc and re-prompt endlessly.
+  const roleSelectedRef = useRef(false);
+  // Tracks the uid the current role decision applies to, so switching users
+  // resets the guard correctly.
+  const decidedUidRef = useRef<string | null>(null);
 
   /* ---- helpers --------------------------------------------------- */
   const clearError = () => setError(null);
@@ -93,6 +101,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /** localStorage-backed demo phone session survives page refresh even on
    *  the Firebase free tier (Blaze) where real phone auth is unavailable. */
   const DEMO_PHONE_KEY = "pulseos.demo.phone";
+  // Cached profile so a page refresh renders instantly instead of waiting on
+  // the Firestore getDoc that follows onAuthStateChanged. Firestore reconciles
+  // it afterwards.
+  const PROFILE_CACHE_KEY = "pulseos.profile";
   const persistDemoPhone = (stub: UserProfile) => {
     if (typeof window === "undefined") return;
     try {
@@ -110,11 +122,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const cacheProfile = (p: UserProfile | null) => {
+    if (typeof window === "undefined") return;
+    try {
+      if (p) window.localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(p));
+      else window.localStorage.removeItem(PROFILE_CACHE_KEY);
+    } catch {
+      /* ignore */
+    }
+  };
+  const readCachedProfile = (): UserProfile | null => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = window.localStorage.getItem(PROFILE_CACHE_KEY);
+      return raw ? (JSON.parse(raw) as UserProfile) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Optimistic: hydrate the profile from cache on first render so a refresh
+  // doesn't show a skeleton while Firestore resolves.
+  const [profile, setProfileState] = useState<UserProfile | null>(() =>
+    readCachedProfile()
+  );
+  const setProfile = useCallback(
+    (p: UserProfile | null) => {
+      cacheProfile(p);
+      setProfileState(p);
+    },
+    []
+  );
+
   /** Fetch (or create) a Firestore profile doc for the given user. When
    *  the profile has no explicitly chosen role (Google / phone / legacy
    *  users), set needsRoleSelection so RolePickerModal prompts them. */
   const loadProfile = useCallback(
     async (u: User, defaultRole: UserRole = "customer", isDemoPhone = false) => {
+      // Reset the per-session guard when the user changes.
+      if (decidedUidRef.current !== u.uid) {
+        decidedUidRef.current = u.uid;
+        roleSelectedRef.current = false;
+      }
+
       const stub: UserProfile = {
         uid: u.uid,
         email: u.email,
@@ -123,9 +173,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: defaultRole,
         role_selected: false,
       };
+
+      const applyRoleDecision = (selected: boolean | undefined) => {
+        const decided = selected === true;
+        // Once decided this session, never re-prompt on later auth re-fires.
+        if (roleSelectedRef.current) {
+          setNeedsRoleSelection(false);
+          return;
+        }
+        if (decided) roleSelectedRef.current = true;
+        setNeedsRoleSelection(!decided);
+      };
+
       if (!db) {
         setProfile(stub);
-        setNeedsRoleSelection(!stub.role_selected);
+        applyRoleDecision(stub.role_selected);
         if (isDemoPhone) persistDemoPhone(stub);
         return;
       }
@@ -136,8 +198,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (snap.exists()) {
           const existing = snap.data() as UserProfile;
           setProfile(existing);
-          /* Returning user who never picked a role → prompt them. */
-          setNeedsRoleSelection(!existing.role_selected);
+          const selected = existing.role_selected === true;
+          if (selected) roleSelectedRef.current = true;
+          applyRoleDecision(selected);
         } else {
           const newProfile: UserProfile = {
             uid: u.uid,
@@ -149,13 +212,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
           await setDoc(ref, { ...newProfile, createdAt: serverTimestamp() });
           setProfile(newProfile);
-          setNeedsRoleSelection(true);
+          applyRoleDecision(false);
         }
       } catch {
         /* Firestore may be unreachable in demo / offline — fall back to
            a stub profile so the rest of the app keeps working. */
         setProfile(stub);
-        setNeedsRoleSelection(!stub.role_selected);
+        applyRoleDecision(stub.role_selected);
         if (isDemoPhone) persistDemoPhone(stub);
       }
     },
@@ -181,6 +244,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       setProfile(next);
       setNeedsRoleSelection(false);
+      roleSelectedRef.current = true;
+      decidedUidRef.current = user.uid;
       /* Demo phone sessions are localStorage-backed; keep them in sync too. */
       if (next.uid.startsWith("phone-user-")) persistDemoPhone(next);
       if (db) {
@@ -419,6 +484,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(null);
     setUser(null);
     setNeedsRoleSelection(false);
+    roleSelectedRef.current = false;
+    decidedUidRef.current = null;
     setError(null);
   };
 
