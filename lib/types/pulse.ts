@@ -44,6 +44,7 @@ export interface Table {
   active_order_id?: string;
   bill_amount: number;
   seated_at?: string;
+  assigned_waiter_id?: string;
 }
 
 export interface MenuItem {

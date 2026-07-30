@@ -6,7 +6,7 @@ import { Plus, User, Mail, Phone, Clock, Star, Trash2, X } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { ProtectedRoute } from "@/lib/firebase/ProtectedRoute";
 import { usePulseStore } from "@/lib/store/usePulseStore";
-import { Panel, PanelHead, Button, Tag, StatStrip, Stat, cx } from "@/components/ui/primitives";
+import { Panel, Button, Tag, StatStrip, Stat, cx } from "@/components/ui/primitives";
 import { StaffMember } from "@/lib/types/pulse";
 
 export default function StaffPage() {
@@ -90,6 +90,8 @@ function StaffCard({
       ? "Break"
       : "Off Duty";
 
+  const initials = member.full_name.split(" ").map(n => n[0]).join("").slice(0, 2);
+
   return (
     <motion.div
       layout
@@ -98,45 +100,71 @@ function StaffCard({
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.2, ease: "easeOut" }}
     >
-      <Panel className="h-full flex flex-col">
-        <PanelHead
-          title={member.full_name}
-          sub={member.role.replace("_", " ").toUpperCase()}
-          action={
-            <Button variant="quiet" size="sm" onClick={onRemove} title="Remove Staff">
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          }
-        />
-        <div className="flex-1 p-5 text-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <Tag tone={statusColor}>{statusLabel}</Tag>
-            <div className="flex items-center gap-1 font-semibold text-ink">
-              <Star className="h-3.5 w-3.5 fill-state-busy text-state-busy" />
-              {member.performance_rating.toFixed(1)}
-            </div>
+      <Panel className="h-full flex flex-col overflow-hidden p-0">
+        {/* Avatar header */}
+        <div className="relative flex items-center gap-4 border-b border-line-soft bg-obsidian-850 px-5 py-4">
+          <div className="relative h-14 w-14 shrink-0">
+            {member.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={member.avatar_url}
+                alt={member.full_name}
+                className="h-14 w-14 rounded-full border-2 border-line-soft bg-obsidian-800 object-cover"
+              />
+            ) : (
+              <div className="grid h-14 w-14 place-items-center rounded-full border-2 border-line-soft bg-obsidian-800 text-lg font-semibold text-ink">
+                {initials}
+              </div>
+            )}
+            {/* Status dot */}
+            <span className={cx(
+              "absolute bottom-0.5 right-0.5 h-3.5 w-3.5 rounded-full border-2 border-obsidian-850",
+              member.shift_status === "on_duty" ? "bg-state-ok" :
+              member.shift_status === "break" ? "bg-state-busy" : "bg-ink-subtle"
+            )} />
           </div>
-          <div className="space-y-3 text-ink-muted">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-semibold text-ink truncate">{member.full_name}</p>
+              <Button variant="quiet" size="sm" onClick={onRemove} title="Remove Staff">
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <p className="text-xs text-ink-subtle mt-0.5">{member.role.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</p>
+            <Tag tone={statusColor}>{statusLabel}</Tag>
+          </div>
+        </div>
+
+        <div className="flex-1 p-5 text-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1 text-ink-muted">
+              <Star className="h-3.5 w-3.5 fill-state-busy text-state-busy" />
+              <span className="font-semibold text-ink">{member.performance_rating.toFixed(1)}</span>
+              <span className="text-xs text-ink-subtle">/ 5.0</span>
+            </div>
+            <span className="font-semibold text-ink">₹{member.hourly_rate}/hr</span>
+          </div>
+          <div className="text-ink-muted space-y-2">
             <div className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-ink-subtle" />
-              <span className="truncate">{member.email}</span>
+              <Mail className="h-4 w-4 text-ink-subtle shrink-0" />
+              <span className="truncate text-xs">{member.email}</span>
             </div>
             {member.phone && (
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-ink-subtle" />
-                <span>{member.phone}</span>
+                <span className="text-xs">{member.phone}</span>
               </div>
             )}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-ink-subtle" />
-                <span>{member.shift_start ? `${member.shift_start} - ${member.shift_end || "Close"}` : "Unscheduled"}</span>
-              </div>
-              <span className="font-semibold text-ink">₹{member.hourly_rate}/hr</span>
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-ink-subtle" />
+              <span className="text-xs">
+                {member.shift_start ? `${member.shift_start}${member.shift_end ? ` – ${member.shift_end}` : " – Close"}` : "Unscheduled"}
+              </span>
             </div>
           </div>
         </div>
-        <div className="border-t border-line-soft bg-obsidian-800 p-4">
+
+        <div className="border-t border-line-soft bg-obsidian-800 px-4 py-3">
           <Button variant="ghost" className="w-full justify-center" onClick={onToggleStatus}>
             Toggle Status
           </Button>

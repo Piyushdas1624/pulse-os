@@ -1,6 +1,5 @@
 "use client";
 
-import Script from "next/script";
 import Navbar from "@/components/Navbar";
 import { Panel, PanelHead, Tag, cx } from "@/components/ui/primitives";
 import {
@@ -125,6 +124,7 @@ export default function RestaurantPage() {
           </div>
         </div>
 
+
         {/* 360° tour */}
         <div className="mt-10">
           <div className="mb-4 flex items-center gap-2">
@@ -132,19 +132,22 @@ export default function RestaurantPage() {
             <h2 className="text-lg font-semibold">Take a virtual walk-through</h2>
           </div>
           <Panel className="overflow-hidden">
-            {/* Kuula 360° embed. The embed script reads the data-kuula URL from
-                this element and renders the tour inside it. */}
-            <div
-              className="ku-embed h-[520px] w-full"
-              data-kuula="https://kuula.co/share/hb9t7?logo=1&info=1&fs=1&vr=0&zoom=1&sd=1&autorotate=0.24&audio=0&thumbs=1&alpha=0.60"
-              data-css="ku-embed"
+            {/* Kuula 360° embed — using direct iframe for reliability */}
+            <iframe
+              className="ku-embed h-[520px] w-full border-0"
+              frameBorder="0"
+              allow="xr-spatial-tracking; gyroscope; accelerometer"
+              allowFullScreen
+              scrolling="no"
+              src="https://kuula.co/share/hb9t7?logo=1&info=1&fs=1&vr=0&zoom=1&sd=1&autorotate=0.24&thumbs=1&alpha=0.60"
+              title="Saffron & Smoke 360° Virtual Tour"
             />
-            <Script src="https://static.kuula.io/embed.js" strategy="afterInteractive" />
           </Panel>
           <p className="mt-2 text-sm text-ink-subtle">
             Drag to look around. On mobile, the tour also supports VR headsets.
           </p>
         </div>
+
       </main>
     </>
   );

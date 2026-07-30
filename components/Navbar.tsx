@@ -15,6 +15,7 @@ const LINKS: NavLink[] = [
   { href: "/operations", label: "Operations", roles: ["owner", "manager", "kitchen_staff"] },
   { href: "/orders", label: "Orders", roles: ["owner", "manager", "kitchen_staff"] },
   { href: "/staff", label: "Staff", roles: ["owner", "manager"] },
+  { href: "/restaurant", label: "Restaurant", roles: ["owner", "manager", "kitchen_staff", "customer"] },
   { href: "/customer", label: "Guest ordering", roles: ["owner", "manager", "kitchen_staff", "customer"] },
   { href: "/qr", label: "QR codes", roles: ["owner", "manager"] },
   { href: "/ai-ops", label: "AI advisor", roles: ["owner", "manager"] },
@@ -43,7 +44,11 @@ export default function Navbar() {
           </span>
         </Link>
 
-        <nav className="flex flex-1 items-center gap-1 overflow-x-auto" aria-label="Primary">
+        <nav
+          className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
+          aria-label="Primary"
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+        >
           {visibleLinks.map((l) => {
             const active = pathname === l.href;
             return (
@@ -52,7 +57,7 @@ export default function Navbar() {
                 href={l.href}
                 aria-current={active ? "page" : undefined}
                 className={cx(
-                  "whitespace-nowrap rounded px-3 py-2 text-sm font-medium",
+                  "whitespace-nowrap rounded px-2.5 py-1.5 text-sm font-medium shrink-0",
                   "transition-colors duration-150 ease-out-quart",
                   active
                     ? "bg-obsidian-800 text-ink"

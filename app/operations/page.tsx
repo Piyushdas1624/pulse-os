@@ -9,6 +9,7 @@ import KitchenCPUScheduler from "@/components/KitchenCPUScheduler";
 import InventoryImpactCards from "@/components/InventoryImpactCards";
 import LiveEventTimeline from "@/components/LiveEventTimeline";
 import { Button } from "@/components/ui/primitives";
+import WaiterTableAssignment from "@/components/WaiterTableAssignment";
 
 export default function OperationsPage() {
   const router = useRouter();
@@ -42,6 +43,10 @@ export default function OperationsPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           <KitchenCPUScheduler />
           <InventoryImpactCards />
+        </div>
+
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_360px]">
+          <WaiterTableAssignment />
         </div>
       </main>
     </>

@@ -159,11 +159,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    *  users), set needsRoleSelection so RolePickerModal prompts them. */
   const loadProfile = useCallback(
     async (u: User, defaultRole: UserRole = "customer", isDemoPhone = false) => {
-      // Reset the per-session guard when the user changes.
+      // ── Session guard ─────────────────────────────────────────────
+      // If we already decided for this uid this session, NEVER re-prompt.
+      if (decidedUidRef.current === u.uid && roleSelectedRef.current) {
+        setNeedsRoleSelection(false);
+        return;
+      }
+      // New uid — reset guard.
       if (decidedUidRef.current !== u.uid) {
         decidedUidRef.current = u.uid;
         roleSelectedRef.current = false;
       }
+
+      const applyRoleDecision = (selected: boolean | undefined) => {
+        const decided = selected === true;
+        if (roleSelectedRef.current) {
+          setNeedsRoleSelection(false);
+          return;
+        }
+        if (decided) roleSelectedRef.current = true;
+        setNeedsRoleSelection(!decided);
+      };
 
       const stub: UserProfile = {
         uid: u.uid,
@@ -172,17 +188,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         photoURL: u.photoURL,
         role: defaultRole,
         role_selected: false,
-      };
-
-      const applyRoleDecision = (selected: boolean | undefined) => {
-        const decided = selected === true;
-        // Once decided this session, never re-prompt on later auth re-fires.
-        if (roleSelectedRef.current) {
-          setNeedsRoleSelection(false);
-          return;
-        }
-        if (decided) roleSelectedRef.current = true;
-        setNeedsRoleSelection(!decided);
       };
 
       if (!db) {
@@ -428,21 +433,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const win = typeof window !== "undefined" ? (window as unknown as { recaptchaVerifier?: RecaptchaVerifier }) : {};
-      if (!win.recaptchaVerifier) {
-        win.recaptchaVerifier = new RecaptchaVerifier(auth!, "recaptcha-container", {
-          size: "invisible",
-        });
+      // Always clear the previous verifier before creating a new one.
+      // If the container was already used, Firebase throws "already rendered".
+      if (win.recaptchaVerifier) {
+        try { win.recaptchaVerifier.clear(); } catch { /* ignore */ }
+        win.recaptchaVerifier = undefined;
       }
+      // Brief tick so the DOM container fully resets before we reinitialise.
+      await new Promise((r) => setTimeout(r, 50));
+      win.recaptchaVerifier = new RecaptchaVerifier(auth!, "recaptcha-container", {
+        size: "invisible",
+      });
       const result = await signInWithPhoneNumber(auth!, phone, win.recaptchaVerifier);
       return result;
     } catch (e: unknown) {
       const win = typeof window !== "undefined" ? (window as unknown as { recaptchaVerifier?: RecaptchaVerifier }) : {};
       if (win.recaptchaVerifier) {
-        try {
-          win.recaptchaVerifier.clear();
-        } catch {
-          /* ignore clear error */
-        }
+        try { win.recaptchaVerifier.clear(); } catch { /* ignore clear error */ }
         win.recaptchaVerifier = undefined;
       }
 

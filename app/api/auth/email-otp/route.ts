@@ -25,7 +25,7 @@ const OTP_STORE = new Map<string, OtpRecord>();
 const TTL_MS = 10 * 60 * 1000;
 
 function sha256(input: string): string {
-  return createHash("sha256").update(input.normalize("utf8")).digest("hex");
+  return createHash("sha256").update(input).digest("hex");
 }
 
 function generateCode(): string {
@@ -33,9 +33,9 @@ function generateCode(): string {
   return String(randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
-async function sendViaResend(email: string, code: string): Promise<boolean> {
+async function sendViaResend(email: string, code: string): Promise<{ ok: boolean; error?: string }> {
   const key = process.env.RESEND_API_KEY;
-  if (!key) return false;
+  if (!key) return { ok: false, error: "RESEND_API_KEY not set" };
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -56,9 +56,14 @@ async function sendViaResend(email: string, code: string): Promise<boolean> {
           </div>`,
       }),
     });
-    return res.ok;
-  } catch {
-    return false;
+    if (res.ok) return { ok: true };
+    // Log the full Resend error so we can debug
+    const errBody = await res.json().catch(() => ({}));
+    console.error("[Resend] delivery failed:", res.status, JSON.stringify(errBody));
+    return { ok: false, error: `Resend ${res.status}: ${JSON.stringify(errBody)}` };
+  } catch (e) {
+    console.error("[Resend] fetch threw:", e);
+    return { ok: false, error: String(e) };
   }
 }
 
@@ -104,10 +109,11 @@ export async function POST(req: Request) {
     consumed: false,
   });
 
-  const emailed = await sendViaResend(email, code);
-  if (emailed) {
+  const result = await sendViaResend(email, code);
+  if (result.ok) {
     return NextResponse.json({ ok: true, delivered: true });
   }
-  // Demo mode: surface the code so the UI can display it honestly.
-  return NextResponse.json({ ok: true, delivered: false, demo: { code } });
+  // Demo mode: surface the code AND the Resend error reason so we can debug.
+  console.log("[OTP] demo mode fallback, reason:", result.error);
+  return NextResponse.json({ ok: true, delivered: false, demo: { code }, reason: result.error });
 }

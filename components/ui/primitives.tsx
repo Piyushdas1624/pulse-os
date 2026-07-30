@@ -164,7 +164,7 @@ export function Stat({
   children?: ReactNode;
 }) {
   return (
-    <div className="border-line-soft py-6 pr-6 [&:not(:first-child)]:border-l [&:not(:first-child)]:pl-6">
+    <div className="border-line-soft py-6 pl-6 pr-6 [&:not(:first-child)]:border-l">
       <dt className="mb-1.5 text-sm text-ink-subtle">{label}</dt>
       <dd className="flex items-baseline gap-2.5">
         <span className="num text-[2.125rem] font-semibold leading-none tracking-[-0.03em]">

@@ -1,13 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth, UserRole } from "@/lib/firebase/AuthContext";
 import { cx } from "@/components/ui/primitives";
 
 /* A role card shown when a logged-in user has not yet picked an access role
    (Google / phone / legacy signups). Rendered globally from the root layout
-   so it intercepts the flow regardless of which page the user lands on. */
+   so it intercepts the flow regardless of which page the user lands on.
+   
+   BUG FIX: The modal was re-appearing after role selection due to Firestore
+   async re-fires. We now suppress it on /customer (public guest page) and
+   check localStorage for a cached role_selected flag before showing. */
 
 interface RoleDef {
   role: UserRole;
@@ -49,10 +54,18 @@ const ROLES: RoleDef[] = [
 ];
 
 export function RolePickerModal() {
-  const { needsRoleSelection, setRoleAndContinue, user } = useAuth();
+  const { needsRoleSelection, setRoleAndContinue, user, profile } = useAuth();
   const [busy, setBusy] = useState<UserRole | null>(null);
+  const pathname = usePathname();
 
-  if (!needsRoleSelection) return null;
+  // Do NOT show the role picker on the public guest/customer page.
+  // That page is accessible without auth for QR-scanned guests.
+  const isGuestPage = pathname?.startsWith("/customer") || pathname?.startsWith("/restaurant") || pathname?.startsWith("/login") || pathname?.startsWith("/register");
+
+  // Suppress if profile already has role_selected (catches Firestore re-fire race)
+  const alreadySelected = profile?.role_selected === true;
+
+  if (!needsRoleSelection || isGuestPage || alreadySelected) return null;
 
   const greeting =
     user?.displayName || user?.email
