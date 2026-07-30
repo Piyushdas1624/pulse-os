@@ -38,6 +38,9 @@ export interface UserProfile {
   photoURL: string | null;
   role: UserRole;
   phone?: string;
+  /** True once the user has explicitly chosen a role. False/absent for
+   *  Google/phone signups that should be routed through the role picker. */
+  role_selected?: boolean;
 }
 
 interface AuthContextValue {
@@ -45,6 +48,11 @@ interface AuthContextValue {
   profile: UserProfile | null;
   loading: boolean;
   error: string | null;
+  /** True when a logged-in user has not yet chosen a role (Google / phone /
+   *  returning users without a role). RolePickerModal renders while true. */
+  needsRoleSelection: boolean;
+  /** Persist the chosen role to the Firestore profile and clear the picker. */
+  setRoleAndContinue: (role: UserRole) => Promise<void>;
   /* Email / password */
   signUpWithEmail: (
     email: string,
@@ -76,21 +84,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [needsRoleSelection, setNeedsRoleSelection] = useState(false);
 
   /* ---- helpers --------------------------------------------------- */
   const clearError = () => setError(null);
 
-  /** Fetch (or create) a Firestore profile doc for the given user. */
+  /** localStorage-backed demo phone session survives page refresh even on
+   *  the Firebase free tier (Blaze) where real phone auth is unavailable. */
+  const DEMO_PHONE_KEY = "pulseos.demo.phone";
+  const persistDemoPhone = (stub: UserProfile) => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(DEMO_PHONE_KEY, JSON.stringify(stub));
+    } catch {
+      /* ignore quota / private mode */
+    }
+  };
+  const clearDemoPhone = () => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.removeItem(DEMO_PHONE_KEY);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  /** Fetch (or create) a Firestore profile doc for the given user. When
+   *  the profile has no explicitly chosen role (Google / phone / legacy
+   *  users), set needsRoleSelection so RolePickerModal prompts them. */
   const loadProfile = useCallback(
-    async (u: User, defaultRole: UserRole = "customer") => {
+    async (u: User, defaultRole: UserRole = "customer", isDemoPhone = false) => {
+      const stub: UserProfile = {
+        uid: u.uid,
+        email: u.email,
+        displayName: u.displayName,
+        photoURL: u.photoURL,
+        role: defaultRole,
+        role_selected: false,
+      };
       if (!db) {
-        setProfile({
-          uid: u.uid,
-          email: u.email,
-          displayName: u.displayName,
-          photoURL: u.photoURL,
-          role: defaultRole,
-        });
+        setProfile(stub);
+        setNeedsRoleSelection(!stub.role_selected);
+        if (isDemoPhone) persistDemoPhone(stub);
         return;
       }
       try {
@@ -98,7 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const snap = await getDoc(ref);
 
         if (snap.exists()) {
-          setProfile(snap.data() as UserProfile);
+          const existing = snap.data() as UserProfile;
+          setProfile(existing);
+          /* Returning user who never picked a role → prompt them. */
+          setNeedsRoleSelection(!existing.role_selected);
         } else {
           const newProfile: UserProfile = {
             uid: u.uid,
@@ -106,39 +144,105 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             displayName: u.displayName,
             photoURL: u.photoURL,
             role: defaultRole,
+            role_selected: false,
           };
           await setDoc(ref, { ...newProfile, createdAt: serverTimestamp() });
           setProfile(newProfile);
+          setNeedsRoleSelection(true);
         }
       } catch {
         /* Firestore may be unreachable in demo / offline — fall back to
            a stub profile so the rest of the app keeps working. */
-        setProfile({
-          uid: u.uid,
-          email: u.email,
-          displayName: u.displayName,
-          photoURL: u.photoURL,
-          role: defaultRole,
-        });
+        setProfile(stub);
+        setNeedsRoleSelection(!stub.role_selected);
+        if (isDemoPhone) persistDemoPhone(stub);
       }
     },
     []
   );
 
+  /** Persist the chosen role and dismiss the role picker. */
+  const setRoleAndContinue = useCallback(
+    async (role: UserRole) => {
+      setError(null);
+      if (!user) return;
+      const next: UserProfile = {
+        ...(profile ?? {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+          role,
+          role_selected: true,
+        }),
+        role,
+        role_selected: true,
+      };
+      setProfile(next);
+      setNeedsRoleSelection(false);
+      /* Demo phone sessions are localStorage-backed; keep them in sync too. */
+      if (next.uid.startsWith("phone-user-")) persistDemoPhone(next);
+      if (db) {
+        try {
+          await setDoc(doc(db, "profiles", user.uid), next, { merge: true });
+        } catch {
+          /* non-fatal: profile is already in state */
+        }
+      }
+    },
+    [user, profile]
+  );
+
   /* ---- auth state listener --------------------------------------- */
   useEffect(() => {
     if (!auth || !isFirebaseConfigured) {
+      /* No Firebase creds. If we have a persisted demo phone session,
+         rehydrate it so the demo survives refreshes even unconfigured. */
+      try {
+        const raw =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem(DEMO_PHONE_KEY)
+            : null;
+        if (raw) {
+          const stub = JSON.parse(raw) as UserProfile;
+          setUser({ uid: stub.uid } as User);
+          setProfile(stub);
+          setNeedsRoleSelection(!stub.role_selected);
+        }
+      } catch {
+        /* ignore malformed session */
+      }
       setLoading(false);
       return;
     }
-    const unsub = onAuthStateChanged(auth, async (u) => {
+    const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
-      if (u) await loadProfile(u);
-      else setProfile(null);
+      // Flip loading immediately so the UI never renders a blank spinner
+      // wall while the Firestore profile read resolves in the background.
       setLoading(false);
+      if (u) {
+        // Fire-and-forget: profile (and role-picker flag) fill in when ready.
+        void loadProfile(u);
+      } else {
+        // No Firebase user — try a persisted demo phone session instead.
+        try {
+          const raw = window.localStorage.getItem(DEMO_PHONE_KEY);
+          if (raw) {
+            const stub = JSON.parse(raw) as UserProfile;
+            setUser({ uid: stub.uid } as User);
+            setProfile(stub);
+            setNeedsRoleSelection(!stub.role_selected);
+            return;
+          }
+        } catch {
+          /* ignore */
+        }
+        setProfile(null);
+        setNeedsRoleSelection(false);
+      }
     });
     return unsub;
-  }, [loadProfile]);
+  }, [loadProfile, DEMO_PHONE_KEY]);
 
 
   /* ---- Email / password ------------------------------------------ */
@@ -161,7 +265,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         /* Ignore email verification send failure if unconfigured */
       }
+      /* Email registration explicitly picks a role → no picker needed. */
       await loadProfile(cred.user, role);
+      setNeedsRoleSelection(false);
     } catch (e: unknown) {
       setError(firebaseErrorMessage(e));
       throw e;
@@ -202,9 +308,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /* ---- Phone OTP (Beta) ----------------------------------------- */
   const sendPhoneOTP = async (phone: string): Promise<ConfirmationResult | null> => {
     setError(null);
+
+    /* Demo Confirmation Result used when Firebase is unconfigured OR rejects
+       phone auth because the project is on the free (Spark) tier — Phone Auth
+       requires the paid Blaze plan, an enabled India (+91) SMS region, and a
+       daily SMS quota. Deterministic: only 123456 / 000000 pass. */
+    const buildDemoResult = (reason: string): ConfirmationResult => {
+      console.warn(`Phone Auth demo mode (${reason}). Use OTP 123456.`);
+      return {
+        verificationId: "demo-verification-" + Date.now(),
+        confirm: async (code: string) => {
+          // Deterministic — accept ONLY the two documented demo codes.
+          if (code !== "123456" && code !== "000000") {
+            throw { code: "auth/invalid-verification-code" };
+          }
+          const stubUser = {
+            uid: "phone-user-" + phone.replace(/\D/g, ""),
+            email: null,
+            displayName: `Guest (${phone})`,
+            photoURL: null,
+          } as unknown as User;
+          setUser(stubUser);
+          await loadProfile(stubUser, "customer", true);
+          return { user: stubUser } as unknown as import("firebase/auth").UserCredential;
+        },
+      } as unknown as ConfirmationResult;
+    };
+
     if (!auth) {
-      setError("Firebase web app credentials not configured in .env.local.");
-      return null;
+      return buildDemoResult("firebase not configured");
     }
 
     try {
@@ -228,34 +360,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const errCode = (e as { code?: string })?.code || "";
-      /* If Firebase rejects due to billing-not-enabled, region policy, or reCAPTCHA,
-         provide a resilient Demo Confirmation Result so judges can test any number with OTP 123456! */
+      /* Free-tier (Spark) rejects Phone Auth. Fall back to demo so judges
+         can still test the flow with OTP 123456. */
       if (
         errCode === "auth/billing-not-enabled" ||
         errCode === "auth/operation-not-allowed" ||
         errCode === "auth/captcha-check-failed" ||
         errCode === "auth/quota-exceeded"
       ) {
-        console.warn(`Firebase SMS (${errCode}). Active Demo Mode: Enter OTP 123456.`);
-        const demoResult = {
-          verificationId: "demo-verification-" + Date.now(),
-          confirm: async (code: string) => {
-            if (code !== "123456" && code !== "000000" && code.length !== 6) {
-              throw { code: "auth/invalid-verification-code" };
-            }
-            const stubUser = {
-              uid: "phone-user-" + phone.replace(/\D/g, ""),
-              email: null,
-              displayName: `Guest (${phone})`,
-              photoURL: null,
-            } as unknown as User;
-            setUser(stubUser);
-            await loadProfile(stubUser, "customer");
-            return { user: stubUser } as unknown as import("firebase/auth").UserCredential;
-          },
-        } as unknown as ConfirmationResult;
-
-        return demoResult;
+        return buildDemoResult(errCode);
       }
 
       setError(firebaseErrorMessage(e));
@@ -280,7 +393,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /* ---- Sign out -------------------------------------------------- */
   const signOut = async () => {
     if (auth) await firebaseSignOut(auth);
+    clearDemoPhone();
     setProfile(null);
+    setUser(null);
+    setNeedsRoleSelection(false);
+    setError(null);
   };
 
   return (
@@ -290,6 +407,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         loading,
         error,
+        needsRoleSelection,
+        setRoleAndContinue,
         signUpWithEmail,
         signInWithEmail,
         signInWithGoogle,
