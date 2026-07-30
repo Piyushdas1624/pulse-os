@@ -1,8 +1,10 @@
 "use client";
 
 import Navbar from "@/components/Navbar";
+import { CheckoutModal } from "@/components/CheckoutModal";
 import { usePulseStore } from "@/lib/store/usePulseStore";
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ShoppingBag,
   Clock,
@@ -10,6 +12,7 @@ import {
   Minus,
   ArrowRight,
   AlertCircle,
+  QrCode,
 } from "lucide-react";
 import { Panel, PanelHead, Button, Tag, cx } from "@/components/ui/primitives";
 
@@ -33,6 +36,15 @@ const CATEGORIES: { key: Category; label: string }[] = [
 ];
 
 export default function CustomerPortal() {
+  // useSearchParams requires a Suspense boundary in Next 15 App Router.
+  return (
+    <Suspense fallback={null}>
+      <CustomerPortalInner />
+    </Suspense>
+  );
+}
+
+function CustomerPortalInner() {
   const {
     menuItems,
     placeOrder,
@@ -45,6 +57,18 @@ export default function CustomerPortal() {
   const [category, setCategory] = useState<Category>("mains");
   const [cart, setCart] = useState<Record<string, number>>({ m1: 2 });
   const [customerName] = useState("Alex (Guest)");
+  const [showCheckout, setShowCheckout] = useState(false);
+
+  // QR scan: ?table=N auto-selects the table so a guest landing from a QR
+  // code doesn't have to pick one.
+  const searchParams = useSearchParams();
+  const scannedTableNum = searchParams.get("table");
+  useEffect(() => {
+    if (!scannedTableNum) return;
+    const match = tables.find((t) => t.table_number === Number(scannedTableNum));
+    if (match) setSelectedTableId(match.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scannedTableNum]);
 
   const currentTable =
     tables.find((t) => t.id === selectedTableId) ?? tables[4]; // Table 5 default
@@ -128,6 +152,15 @@ export default function CustomerPortal() {
             ))}
           </div>
         </div>
+
+        {scannedTableNum && (
+          <div className="mb-6 flex items-center gap-2.5 rounded-lg border border-state-calmDim bg-state-calmDim/25 px-4 py-3 text-sm">
+            <QrCode size={16} className="shrink-0 text-state-calm" />
+            <span className="text-ink-muted">
+              Scanned Table <span className="font-semibold text-state-calm">{currentTable.table_number}</span> — menu loaded for this table.
+            </span>
+          </div>
+        )}
 
         {tableBlocked && (
           <div className="mb-6 flex items-start gap-2.5 rounded-lg border border-state-busyDim bg-state-busyDim/30 px-4 py-3 text-sm">
@@ -249,9 +282,18 @@ export default function CustomerPortal() {
                 </li>
               ))}
             </ol>
+            <div className="mt-4 border-t border-line-soft pt-4">
+              <Button variant="primary" onClick={() => setShowCheckout(true)}>
+                Checkout / Pay <ArrowRight size={14} />
+              </Button>
+            </div>
           </Panel>
         )}
       </main>
+
+      {showCheckout && (
+        <CheckoutModal tableId={currentTable.id} onClose={() => setShowCheckout(false)} />
+      )}
 
       {cartTotal > 0 && (
         <div className="fixed bottom-4 left-1/2 z-40 w-[min(1024px,calc(100%-2rem))] -translate-x-1/2">

@@ -12,12 +12,15 @@ import {
   AIBudgetMode,
   TableStatus,
   StaffMember,
+  PaymentInfo,
+  OrderHistoryItem,
 } from "../types/pulse";
 
 interface PulseState {
   tables: Table[];
   menuItems: MenuItem[];
   orders: Order[];
+  orderHistory: OrderHistoryItem[];
   inventory: InventoryItem[];
   kitchenQueue: KitchenTicket[];
   liveEvents: LiveEvent[];
@@ -45,6 +48,9 @@ interface PulseState {
   placeOrder: (tableId: string, items: { menuItemId: string; qty: number }[], customerName?: string) => void;
   advanceKitchenTicket: (ticketId: string) => void;
   clearTable: (tableId: string) => void;
+  /** Checkout: compute GST + tip, push a paid OrderHistoryItem, clear table. */
+  checkoutTable: (tableId: string, payment: PaymentInfo) => void;
+  getRevenueToday: () => number;
   addLiveEvent: (type: LiveEvent["type"], description: string, severity?: LiveEvent["severity"], tableNumber?: number) => void;
   applyAIRecommendation: (insightId: string) => void;
   triggerExecutiveAudit: () => Promise<void>;
@@ -300,6 +306,7 @@ export const usePulseStore = create<PulseState>((set, get) => ({
   tables: INITIAL_TABLES,
   menuItems: INITIAL_MENU,
   orders: [],
+  orderHistory: [],
   inventory: INITIAL_INVENTORY,
   kitchenQueue: INITIAL_TICKETS,
   liveEvents: INITIAL_EVENTS,
@@ -645,6 +652,53 @@ export const usePulseStore = create<PulseState>((set, get) => ({
 
     set({ tables: updatedTables, orders: updatedOrders });
     state.addLiveEvent("table", `Table ${table.table_number} cleared and back in service`, "info", table.table_number);
+  },
+
+  checkoutTable: (tableId, payment) => {
+    const state = get();
+    const table = state.tables.find((t) => t.id === tableId);
+    if (!table) return;
+
+    // Build the history item from the table's open order if present.
+    const openOrder = state.orders.find(
+      (o) => o.table_id === tableId && o.status !== "completed" && o.status !== "cancelled"
+    );
+
+    const items = openOrder
+      ? openOrder.items.map((i) => ({ name: i.item_name, qty: i.qty, price: i.price }))
+      : [{ name: "Table bill", qty: 1, price: table.bill_amount }];
+
+    const historyItem: OrderHistoryItem = {
+      order_id: openOrder?.id ?? `bill-${table.id}`,
+      table_number: table.table_number,
+      customer_name: openOrder?.customer_name ?? "Guest",
+      items,
+      total_amount: payment.subtotal,
+      tax_amount: payment.tax_amount,
+      tip_amount: payment.tip_amount,
+      payment_status: "paid",
+      payment_method: payment.method,
+      created_at: openOrder?.created_at ?? new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    };
+
+    // Reuse clearTable's table+order reset, then record the payment.
+    get().clearTable(tableId);
+    set({ orderHistory: [historyItem, ...get().orderHistory] });
+    get().addLiveEvent(
+      "order",
+      `Table ${table.table_number} paid ₹${payment.grand_total.toLocaleString("en-IN")} via ${payment.method.toUpperCase()}`,
+      "success",
+      table.table_number
+    );
+  },
+
+  getRevenueToday: () => {
+    const state = get();
+    const today = new Date().toDateString();
+    return state.orderHistory
+      .filter((o) => new Date(o.completed_at ?? o.created_at).toDateString() === today)
+      .reduce((sum, o) => sum + o.total_amount + o.tax_amount + o.tip_amount, 0);
   },
 
   applyAIRecommendation: (insightId) => {
