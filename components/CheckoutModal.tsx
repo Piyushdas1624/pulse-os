@@ -91,9 +91,15 @@ export function CheckoutModal({ tableId, onClose }: { tableId: string; onClose: 
 
   if (!table) return null;
 
+  // Snapshot receipt data BEFORE checkoutTable clears the orders.
+  const receiptRef = useRef<{ orderId: string; lines: typeof lines } | null>(null);
+
   const handlePay = () => {
+    // Capture everything NOW while orders are still in store.
+    const orderId = openOrders[0]?.id?.slice(0, 8).toUpperCase() || `TBL${table.table_number}`;
+    receiptRef.current = { orderId, lines: [...lines] };
+
     setStage("processing");
-    // Goal-gradient: a real-feeling ~4s progress, then confirm.
     setTimeout(() => {
       const payment: PaymentInfo = {
         method,
@@ -155,7 +161,7 @@ export function CheckoutModal({ tableId, onClose }: { tableId: string; onClose: 
               <div className="border-t-[1.5px] border-dashed border-gray-300 py-3 my-3">
                 <div className="flex justify-between">
                   <span>Table: {table.table_number}</span>
-                  <span>Order: #{openOrders[0]?.id?.slice(0,6).toUpperCase() || 'WALKIN'}</span>
+                  <span>Order: #{receiptRef.current?.orderId ?? `TBL${table.table_number}`}</span>
                 </div>
                 <div className="flex justify-between mt-1 text-xs text-gray-600">
                   <span>Date:</span>
@@ -172,7 +178,7 @@ export function CheckoutModal({ tableId, onClose }: { tableId: string; onClose: 
                     </tr>
                   </thead>
                   <tbody>
-                    {lines.map((l, i) => (
+                    {(receiptRef.current?.lines ?? lines).map((l, i) => (
                       <tr key={i}>
                         <td className="py-1 align-top">{l.qty}x {l.name}</td>
                         <td className="py-1 text-right align-top">₹{(l.price * l.qty).toLocaleString("en-IN")}</td>

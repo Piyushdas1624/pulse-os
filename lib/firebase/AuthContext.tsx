@@ -198,15 +198,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       try {
         const ref = doc(db, "profiles", u.uid);
-        const snap = await getDoc(ref);
+        // Race Firestore against a 2.5s timeout.
+        // Ad-blockers silently block firestore.googleapis.com causing 10s+ hangs.
+        const timeoutP = new Promise<null>((r) => setTimeout(() => r(null), 2500));
+        const snap = await Promise.race([getDoc(ref), timeoutP]);
 
-        if (snap.exists()) {
+        if (snap && snap.exists()) {
           const existing = snap.data() as UserProfile;
           setProfile(existing);
           const selected = existing.role_selected === true;
           if (selected) roleSelectedRef.current = true;
           applyRoleDecision(selected);
-        } else {
+        } else if (snap) {
+          // Firestore responded but doc doesn't exist — new user.
           const newProfile: UserProfile = {
             uid: u.uid,
             email: u.email,
@@ -215,13 +219,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role: defaultRole,
             role_selected: false,
           };
-          await setDoc(ref, { ...newProfile, createdAt: serverTimestamp() });
+          try { await setDoc(ref, { ...newProfile, createdAt: serverTimestamp() }); } catch { /* ignore */ }
           setProfile(newProfile);
           applyRoleDecision(false);
+        } else {
+          // Timed out — fall back to cached profile so UI loads instantly.
+          console.warn("[Auth] Firestore timed out, using cached profile");
+          const cached = readCachedProfile();
+          if (cached && cached.uid === u.uid) {
+            setProfile(cached);
+            applyRoleDecision(cached.role_selected);
+          } else {
+            setProfile(stub);
+            applyRoleDecision(false); // prompt role picker for new user
+          }
         }
       } catch {
-        /* Firestore may be unreachable in demo / offline — fall back to
-           a stub profile so the rest of the app keeps working. */
+        /* Firestore blocked — fall back to stub so app keeps working. */
         setProfile(stub);
         applyRoleDecision(stub.role_selected);
         if (isDemoPhone) persistDemoPhone(stub);
@@ -433,23 +447,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const win = typeof window !== "undefined" ? (window as unknown as { recaptchaVerifier?: RecaptchaVerifier }) : {};
-      // Always clear the previous verifier before creating a new one.
-      // If the container was already used, Firebase throws "already rendered".
+      // Always clear previous verifier.
       if (win.recaptchaVerifier) {
         try { win.recaptchaVerifier.clear(); } catch { /* ignore */ }
         win.recaptchaVerifier = undefined;
       }
-      // Brief tick so the DOM container fully resets before we reinitialise.
-      await new Promise((r) => setTimeout(r, 50));
-      win.recaptchaVerifier = new RecaptchaVerifier(auth!, "recaptcha-container", {
+      // Create a FRESH container div each time — Firebase throws "already
+      // rendered" if the same DOM node is reused, even after .clear().
+      const containerId = `rc-${Date.now()}`;
+      const container = document.createElement("div");
+      container.id = containerId;
+      container.style.display = "none";
+      document.body.appendChild(container);
+
+      win.recaptchaVerifier = new RecaptchaVerifier(auth!, containerId, {
         size: "invisible",
+        callback: () => { /* verified */ },
+        "expired-callback": () => {
+          try { win.recaptchaVerifier?.clear(); } catch { /* ignore */ }
+          win.recaptchaVerifier = undefined;
+          document.getElementById(containerId)?.remove();
+        },
       });
+
       const result = await signInWithPhoneNumber(auth!, phone, win.recaptchaVerifier);
+      // Clean up the temporary container after a short delay.
+      setTimeout(() => document.getElementById(containerId)?.remove(), 5000);
       return result;
     } catch (e: unknown) {
       const win = typeof window !== "undefined" ? (window as unknown as { recaptchaVerifier?: RecaptchaVerifier }) : {};
       if (win.recaptchaVerifier) {
-        try { win.recaptchaVerifier.clear(); } catch { /* ignore clear error */ }
+        try { win.recaptchaVerifier.clear(); } catch { /* ignore */ }
         win.recaptchaVerifier = undefined;
       }
 
@@ -544,7 +572,7 @@ function firebaseErrorMessage(e: unknown): string {
     "auth/weak-password": "Password must be at least 6 characters.",
     "auth/too-many-requests": "Too many attempts. Please wait a moment.",
     "auth/popup-closed-by-user": "Sign-in popup was closed.",
-    "auth/invalid-phone-number": "Please enter a valid phone number with country code (e.g. +91 9339597668).",
+    "auth/invalid-phone-number": "Please enter a valid phone number with country code (e.g. +91 XXXXX XXXXX).",
     "auth/invalid-verification-code": "Invalid OTP code. Please try again.",
     "auth/invalid-credential": "Invalid credentials. Please check and try again.",
     "auth/operation-not-allowed": "SMS Region Policy: Please enable India (+91) under Firebase Console → Auth → Settings → SMS Region Policy.",
