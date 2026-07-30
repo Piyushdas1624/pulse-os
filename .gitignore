@@ -31,3 +31,21 @@ yarn-error.log*
 
 # Antigravity / Gemini state
 .gemini/
+
+# === Personal / non-submission files (DO NOT commit) ===
+/agents/
+/.agents/
+/video/
+future_implementation.md
+competitor_analysis.md
+hackathon.md
+psychology.md
+other websies.md
+implementation_plan.md
+skills-lock.json
+
+# SDD scratch / progress tracking (local only)
+/.superpowers/
+
+# TS build info cache
+tsconfig.tsbuildinfo
