@@ -14,6 +14,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useAuth, type UserRole } from "@/lib/firebase/AuthContext";
+import { requestEmailOtp, verifyEmailOtp } from "@/lib/firebase/emailOtp";
 import { cx } from "@/components/ui/primitives";
 
 const ROLES: { value: UserRole; label: string; description: string }[] = [
@@ -36,7 +37,13 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: FormEvent) => {
+  // Email OTP verification flow: "form" → "verify" → (account created)
+  const [otpStep, setOtpStep] = useState<"form" | "verify">("form");
+  const [otpCode, setOtpCode] = useState("");
+  const [demoCode, setDemoCode] = useState<string | null>(null);
+
+  /** Phase 1: validate the form, then send a verification code. */
+  const handleSendCode = async (e: FormEvent) => {
     e.preventDefault();
     clearError();
     setLocalError(null);
@@ -52,13 +59,49 @@ export default function RegisterPage() {
 
     setSubmitting(true);
     try {
-      await signUpWithEmail(email, password, name, role);
-      router.push("/");
+      const result = await requestEmailOtp(email);
+      if (!result.ok) {
+        setLocalError(result.error || "Could not send a verification code.");
+        return;
+      }
+      setDemoCode(result.delivered ? null : result.demo?.code ?? null);
+      setOtpStep("verify");
     } catch {
-      /* error is set in context */
+      setLocalError("Could not send a verification code. Try again.");
     } finally {
       setSubmitting(false);
     }
+  };
+
+  /** Phase 2: verify the code, then create the account. */
+  const handleVerifyAndCreate = async (e: FormEvent) => {
+    e.preventDefault();
+    clearError();
+    setLocalError(null);
+
+    if (otpCode.trim().length !== 6) {
+      setLocalError("Enter the 6-digit code we sent to your email.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await verifyEmailOtp(email, otpCode.trim());
+      await signUpWithEmail(email, password, name, role, phoneNum || undefined);
+      router.push("/");
+    } catch (err) {
+      setLocalError(
+        err instanceof Error ? err.message : "Verification or signup failed."
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const backToForm = () => {
+    setOtpStep("form");
+    setOtpCode("");
+    setLocalError(null);
   };
 
   const handleGoogle = async () => {
@@ -93,7 +136,9 @@ export default function RegisterPage() {
 
         {/* ---- Card ---- */}
         <div className="rounded-xl border border-line-soft bg-obsidian-850 p-6">
-          <h2 className="mb-6 text-base font-semibold">Register</h2>
+          <h2 className="mb-6 text-base font-semibold">
+            {otpStep === "verify" ? "Verify your email" : "Register"}
+          </h2>
 
           {/* Error banner */}
           {displayError && (
@@ -103,138 +148,203 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {/* Full Name */}
-            <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-subtle">
-                Full Name
-              </label>
-              <div className="relative">
-                <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Marcus Chen"
-                  className="w-full rounded-lg border border-line-soft bg-obsidian-800 py-2.5 pl-10 pr-4 text-sm text-ink placeholder:text-ink-subtle/50 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink/30"
-                />
-              </div>
+          {/* Demo-mode OTP banner (pratfall effect: transparency builds trust) */}
+          {otpStep === "verify" && demoCode && (
+            <div className="mb-4 rounded-lg bg-state-busyDim px-3 py-2.5 text-sm text-state-busy">
+              <p className="font-semibold">Demo mode — email not configured</p>
+              <p className="mt-0.5 text-ink-muted">
+                Your verification code is{" "}
+                <span className="font-mono text-base font-bold tracking-[0.2em] text-ink">
+                  {demoCode}
+                </span>
+              </p>
             </div>
+          )}
 
-            {/* Email */}
-            <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-subtle">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="chef@pulseos.app"
-                  className="w-full rounded-lg border border-line-soft bg-obsidian-800 py-2.5 pl-10 pr-4 text-sm text-ink placeholder:text-ink-subtle/50 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink/30"
-                />
-              </div>
-            </div>
-
-            {/* Phone (optional) */}
-            <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-subtle">
-                Phone Number <span className="normal-case text-ink-subtle/50">(optional)</span>
-              </label>
-              <div className="relative">
-                <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
-                <input
-                  type="tel"
-                  value={phoneNum}
-                  onChange={(e) => setPhoneNum(e.target.value)}
-                  placeholder="+91 98765 43210"
-                  className="w-full rounded-lg border border-line-soft bg-obsidian-800 py-2.5 pl-10 pr-4 text-sm text-ink placeholder:text-ink-subtle/50 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink/30"
-                />
-              </div>
-            </div>
-
-            {/* Role */}
-            <div>
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-subtle">
-                Role
-              </label>
-              <div className="relative">
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as UserRole)}
-                  className="w-full appearance-none rounded-lg border border-line-soft bg-obsidian-800 py-2.5 pl-4 pr-10 text-sm text-ink focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink/30"
-                >
-                  {ROLES.map((r) => (
-                    <option key={r.value} value={r.value}>
-                      {r.label} — {r.description}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
-              </div>
-            </div>
-
-            {/* Password */}
-            <div className="grid gap-4 sm:grid-cols-2">
+          {otpStep === "form" ? (
+            <form onSubmit={handleSendCode} className="flex flex-col gap-4">
+              {/* Full Name */}
               <div>
                 <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-subtle">
-                  Password
+                  Full Name
                 </label>
                 <div className="relative">
-                  <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
+                  <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
                   <input
-                    type="password"
+                    type="text"
                     required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Marcus Chen"
                     className="w-full rounded-lg border border-line-soft bg-obsidian-800 py-2.5 pl-10 pr-4 text-sm text-ink placeholder:text-ink-subtle/50 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink/30"
                   />
                 </div>
               </div>
+
+              {/* Email */}
               <div>
                 <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-subtle">
-                  Confirm
+                  Email Address
                 </label>
                 <div className="relative">
-                  <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
+                  <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
                   <input
-                    type="password"
+                    type="email"
                     required
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className={cx(
-                      "w-full rounded-lg border bg-obsidian-800 py-2.5 pl-10 pr-4 text-sm text-ink placeholder:text-ink-subtle/50 focus:outline-none focus:ring-1",
-                      confirmPassword && confirmPassword !== password
-                        ? "border-state-risk focus:border-state-risk focus:ring-state-risk/30"
-                        : "border-line-soft focus:border-ink focus:ring-ink/30"
-                    )}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="chef@pulseos.app"
+                    className="w-full rounded-lg border border-line-soft bg-obsidian-800 py-2.5 pl-10 pr-4 text-sm text-ink placeholder:text-ink-subtle/50 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink/30"
                   />
                 </div>
               </div>
-            </div>
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={submitting}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-ink py-2.5 text-sm font-semibold text-obsidian-900 transition-all hover:bg-white active:scale-[0.985] disabled:opacity-40"
-            >
-              {submitting ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-obsidian-800 border-t-obsidian-900" />
-              ) : (
-                <>
-                  Create Account
-                  <ArrowRight size={16} />
-                </>
-              )}
-            </button>
-          </form>
+              {/* Phone (optional) */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Phone Number <span className="normal-case text-ink-subtle/50">(optional)</span>
+                </label>
+                <div className="relative">
+                  <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
+                  <input
+                    type="tel"
+                    value={phoneNum}
+                    onChange={(e) => setPhoneNum(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    className="w-full rounded-lg border border-line-soft bg-obsidian-800 py-2.5 pl-10 pr-4 text-sm text-ink placeholder:text-ink-subtle/50 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink/30"
+                  />
+                </div>
+              </div>
+
+              {/* Role */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Role
+                </label>
+                <div className="relative">
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as UserRole)}
+                    className="w-full appearance-none rounded-lg border border-line-soft bg-obsidian-800 py-2.5 pl-4 pr-10 text-sm text-ink focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink/30"
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label} — {r.description}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
+                    <input
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full rounded-lg border border-line-soft bg-obsidian-800 py-2.5 pl-10 pr-4 text-sm text-ink placeholder:text-ink-subtle/50 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink/30"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                    Confirm
+                  </label>
+                  <div className="relative">
+                    <Lock size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
+                    <input
+                      type="password"
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className={cx(
+                        "w-full rounded-lg border bg-obsidian-800 py-2.5 pl-10 pr-4 text-sm text-ink placeholder:text-ink-subtle/50 focus:outline-none focus:ring-1",
+                        confirmPassword && confirmPassword !== password
+                          ? "border-state-risk focus:border-state-risk focus:ring-state-risk/30"
+                          : "border-line-soft focus:border-ink focus:ring-ink/30"
+                      )}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit → send code */}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-ink py-2.5 text-sm font-semibold text-obsidian-900 transition-all hover:bg-white active:scale-[0.985] disabled:opacity-40"
+              >
+                {submitting ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-obsidian-800 border-t-obsidian-900" />
+                ) : (
+                  <>
+                    Send Verification Code
+                    <ArrowRight size={16} />
+                  </>
+                )}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleVerifyAndCreate} className="flex flex-col gap-4">
+              <p className="text-sm text-ink-muted">
+                We sent a 6-digit code to{" "}
+                <span className="font-medium text-ink">{email}</span>. Enter it
+                below to finish creating your account.
+              </p>
+
+              {/* OTP input */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-ink-subtle">
+                  Verification Code
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  required
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="123456"
+                  className="w-full rounded-lg border border-line-soft bg-obsidian-800 py-2.5 px-4 text-center font-mono text-lg tracking-[0.4em] text-ink placeholder:text-ink-subtle/40 focus:border-ink focus:outline-none focus:ring-1 focus:ring-ink/30"
+                />
+              </div>
+
+              {/* Verify & create */}
+              <button
+                type="submit"
+                disabled={submitting}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg bg-ink py-2.5 text-sm font-semibold text-obsidian-900 transition-all hover:bg-white active:scale-[0.985] disabled:opacity-40"
+              >
+                {submitting ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-obsidian-800 border-t-obsidian-900" />
+                ) : (
+                  <>
+                    Verify &amp; Create Account
+                    <ArrowRight size={16} />
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={backToForm}
+                className="text-sm text-ink-subtle hover:text-ink"
+              >
+                ← Use a different email
+              </button>
+            </form>
+          )}
 
           {/* ---- Divider ---- */}
           <div className="my-5 flex items-center gap-3">

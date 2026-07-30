@@ -79,16 +79,14 @@ export default function LoginPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-obsidian-900">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-ink-subtle border-t-ink" />
-      </div>
-    );
-  }
-
+  // Don't block the whole page on the initial auth check — render the form
+  // immediately and dim it slightly while the session resolves, so the user
+  // never stares at a blank spinner wall.
   return (
-    <div className="flex min-h-screen items-center justify-center bg-obsidian-900 px-4">
+    <div className={cx(
+      "flex min-h-screen items-center justify-center bg-obsidian-900 px-4 transition-opacity duration-200",
+      loading && "pointer-events-none opacity-50"
+    )}>
       <div className="w-full max-w-[420px]">
         {/* ---- Brand ---- */}
         <div className="mb-10 flex flex-col items-center gap-3">

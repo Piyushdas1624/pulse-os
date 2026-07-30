@@ -58,7 +58,8 @@ interface AuthContextValue {
     email: string,
     password: string,
     displayName: string,
-    role: UserRole
+    role: UserRole,
+    phone?: string
   ) => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   /* Google */
@@ -250,7 +251,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     displayName: string,
-    role: UserRole
+    role: UserRole,
+    phone?: string
   ) => {
     setError(null);
     if (!auth) {
@@ -265,8 +267,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         /* Ignore email verification send failure if unconfigured */
       }
-      /* Email registration explicitly picks a role → no picker needed. */
-      await loadProfile(cred.user, role);
+      /* Email registration explicitly picks a role → no picker needed.
+         Persist the optional phone into the profile so it is not dropped. */
+      const baseProfile = {
+        uid: cred.user.uid,
+        email: cred.user.email,
+        displayName,
+        photoURL: cred.user.photoURL,
+        role,
+        role_selected: true as const,
+        ...(phone ? { phone } : {}),
+      };
+      if (db) {
+        try {
+          await setDoc(doc(db, "profiles", cred.user.uid), baseProfile, {
+            merge: true,
+          });
+        } catch {
+          /* non-fatal: fall through to in-memory profile */
+        }
+      }
+      setProfile(baseProfile);
+      setUser(cred.user);
       setNeedsRoleSelection(false);
     } catch (e: unknown) {
       setError(firebaseErrorMessage(e));
