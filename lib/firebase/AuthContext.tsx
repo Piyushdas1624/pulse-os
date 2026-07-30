@@ -24,8 +24,22 @@ import {
   sendEmailVerification,
 } from "firebase/auth";
 
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp, DocumentReference, DocumentData } from "firebase/firestore";
 import { auth, db, isFirebaseConfigured } from "@/lib/firebase/config";
+
+// Wrap setDoc in a 2-second timeout to prevent the UI from hanging infinitely
+// when ad-blockers block firestore.googleapis.com
+const safeSetDoc = async (ref: DocumentReference, data: DocumentData, options?: { merge?: boolean }) => {
+  const timeoutP = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 2000));
+  try {
+    await Promise.race([
+      options ? setDoc(ref, data, options) : setDoc(ref, data),
+      timeoutP
+    ]);
+  } catch (e) {
+    console.warn("[Auth] safeSetDoc timed out or failed, ignoring to prevent UI hang.");
+  }
+};
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -219,7 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role: defaultRole,
             role_selected: false,
           };
-          try { await setDoc(ref, { ...newProfile, createdAt: serverTimestamp() }); } catch { /* ignore */ }
+          try { await safeSetDoc(ref, { ...newProfile, createdAt: serverTimestamp() }); } catch { /* ignore */ }
           setProfile(newProfile);
           applyRoleDecision(false);
         } else {
@@ -269,7 +283,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (next.uid.startsWith("phone-user-")) persistDemoPhone(next);
       if (db) {
         try {
-          await setDoc(doc(db, "profiles", user.uid), next, { merge: true });
+          await safeSetDoc(doc(db, "profiles", user.uid), next, { merge: true });
         } catch {
           /* non-fatal: profile is already in state */
         }
@@ -364,7 +378,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       if (db) {
         try {
-          await setDoc(doc(db, "profiles", cred.user.uid), baseProfile, {
+          await safeSetDoc(doc(db, "profiles", cred.user.uid), baseProfile, {
             merge: true,
           });
         } catch {
