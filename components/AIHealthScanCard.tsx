@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { usePulseStore } from "@/lib/store/usePulseStore";
 import {
   Panel,
@@ -89,7 +90,13 @@ export default function AIHealthScanCard() {
       )}
 
       {primary ? (
-        <div className="px-5 py-5">
+        // Breathing animation: the only subtly-moving element on the page,
+        // so it captures foveal attention (Von Restorff) before the eye reads it.
+        <motion.div
+          className="px-5 py-5"
+          animate={{ scale: [1, 1.015, 1] }}
+          transition={{ duration: 3, ease: "easeInOut", repeat: Infinity }}
+        >
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -148,7 +155,7 @@ export default function AIHealthScanCard() {
               Apply <ArrowRight size={14} />
             </Button>
           </div>
-        </div>
+        </motion.div>
       ) : (
         <div className="px-5 py-10 text-center">
           <p className="text-sm text-ink-subtle">

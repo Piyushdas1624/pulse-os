@@ -5,6 +5,7 @@ import { CheckoutModal } from "@/components/CheckoutModal";
 import { usePulseStore } from "@/lib/store/usePulseStore";
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ShoppingBag,
   Clock,
@@ -13,6 +14,7 @@ import {
   ArrowRight,
   AlertCircle,
   QrCode,
+  Check,
 } from "lucide-react";
 import { Panel, PanelHead, Button, Tag, cx } from "@/components/ui/primitives";
 
@@ -58,6 +60,7 @@ function CustomerPortalInner() {
   const [cart, setCart] = useState<Record<string, number>>({ m1: 2 });
   const [customerName] = useState("Alex (Guest)");
   const [showCheckout, setShowCheckout] = useState(false);
+  const [justOrdered, setJustOrdered] = useState(false);
 
   // QR scan: ?table=N auto-selects the table so a guest landing from a QR
   // code doesn't have to pick one.
@@ -106,6 +109,9 @@ function CustomerPortalInner() {
     if (items.length === 0) return;
     placeOrder(currentTable.id, items, customerName);
     setCart({});
+    // Peak-end: a brief, satisfying confirmation (expanding circle + check).
+    setJustOrdered(true);
+    setTimeout(() => setJustOrdered(false), 1800);
   };
 
   const cartTotal = Object.entries(cart).reduce((sum, [id, qty]) => {
@@ -117,6 +123,34 @@ function CustomerPortalInner() {
 
   return (
     <>
+      <AnimatePresence>
+        {justOrdered && (
+          <motion.div
+            className="fixed inset-0 z-[80] flex flex-col items-center justify-center bg-obsidian-950/70 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.span
+              className="grid h-20 w-20 place-items-center rounded-full bg-state-okDim text-state-ok"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 12 }}
+            >
+              <Check size={40} />
+            </motion.span>
+            <motion.p
+              className="mt-4 text-lg font-semibold"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+            >
+              Order confirmed!
+            </motion.p>
+            <p className="text-sm text-ink-subtle">The kitchen just got your ticket.</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <Navbar />
       <main
         className={cx(

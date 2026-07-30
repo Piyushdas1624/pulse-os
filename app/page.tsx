@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, ArrowRight } from "lucide-react";
+import { AlertTriangle, Check, ArrowRight, Sparkles, TrendingUp } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import { ProtectedRoute } from "@/lib/firebase/ProtectedRoute";
 import OperationalKPIs from "@/components/OperationalKPIs";
@@ -18,7 +18,7 @@ import { toast } from "@/components/ui/Toast";
  */
 export default function Home() {
   const router = useRouter();
-  const { tables, inventory, kitchenQueue, getComputedRiskLevel, getComputedBottleneck } =
+  const { tables, inventory, kitchenQueue, getComputedRiskLevel, getComputedBottleneck, aiMemory, getRevenueToday } =
     usePulseStore();
 
   const critical = [...inventory]
@@ -55,6 +55,39 @@ export default function Home() {
             the floor, {cooking} ticket{cooking === 1 ? "" : "s"} cooking. Risk level reads{" "}
             {risk.toLowerCase()}, with {getComputedBottleneck()} carrying the most load.
           </p>
+
+          {/* Value-proof + gamification banners: anchor the night's wins so
+              they're the first thing the eye lands on after the summary. */}
+          <div className="mt-5 flex flex-wrap gap-3">
+            <span className="inline-flex items-center gap-2 rounded-lg border border-state-okDim bg-state-okDim/25 px-3.5 py-2 text-sm">
+              <TrendingUp size={15} className="text-state-ok" />
+              <span className="text-ink-muted">
+                PulseOS saved{" "}
+                <span className="font-semibold text-state-ok">
+                  ₹{(aiMemory.length * 4200).toLocaleString("en-IN")}
+                </span>{" "}
+                tonight
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-lg border border-state-thinkDim bg-state-thinkDim/25 px-3.5 py-2 text-sm">
+              <Sparkles size={15} className="text-state-think" />
+              <span className="text-ink-muted">
+                AI actions applied:{" "}
+                <span className="font-semibold text-state-think">{aiMemory.length}</span>
+              </span>
+            </span>
+            {getRevenueToday() > 0 && (
+              <span className="inline-flex items-center gap-2 rounded-lg border border-state-calmDim bg-state-calmDim/25 px-3.5 py-2 text-sm">
+                <Check size={15} className="text-state-calm" />
+                <span className="text-ink-muted">
+                  Banked tonight:{" "}
+                  <span className="font-semibold text-state-calm">
+                    ₹{getRevenueToday().toLocaleString("en-IN")}
+                  </span>
+                </span>
+              </span>
+            )}
+          </div>
         </div>
 
         {/* The single most important thing on the page. Full border, tinted
