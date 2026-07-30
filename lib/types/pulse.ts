@@ -101,7 +101,7 @@ export interface KitchenTicket {
   qty: number;
   table_numbers: number[];
   status: "pending" | "cooking" | "ready";
-  station: "Station A (Grill)" | "Station B (Saute)" | "Station C (Assembly)";
+  station: "Tandoor/Grill" | "Curry/Handi" | "Tawa/Biryani" | "Assembly/Desserts";
   prep_priority: "normal" | "high" | "batched";
   created_at: string;
 }

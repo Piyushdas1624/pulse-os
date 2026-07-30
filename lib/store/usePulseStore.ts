@@ -73,106 +73,174 @@ const INITIAL_TABLES: Table[] = [
 const INITIAL_MENU: MenuItem[] = [
   {
     id: "m1",
-    name: "A5 Wagyu Smoked Burger",
-    category: "mains",
-    price: 1850,
-    prep_time_mins: 14,
-    is_available: true,
-    stock_qty: 18,
-    description: "Miyazaki A5 Wagyu beef patty, smoked aged cheddar, truffle aioli on toasted brioche.",
-    ingredients: ["A5 Wagyu Beef", "Aged Truffle Cheese", "Brioche Buns"],
-    recommended_with: "m6",
-    image_url: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=400&q=80",
-  },
-  {
-    id: "m2",
-    name: "Black Truffle Tagliatelle",
-    category: "mains",
-    price: 1650,
-    prep_time_mins: 10,
-    is_available: true,
-    stock_qty: 12,
-    description: "Fresh hand-rolled pasta, Norcia black truffle butter, 36-month Parmigiano Reggiano.",
-    ingredients: ["Handcrafted Pasta", "Aged Truffle Cheese", "Butter"],
-    recommended_with: "m5",
-    image_url: "https://images.unsplash.com/photo-1621996346565-e3d5d6281318?auto=format&fit=crop&w=400&q=80",
-  },
-  {
-    id: "m3",
-    name: "Wood-Fired Burrata Pizza",
-    category: "mains",
-    price: 1450,
-    prep_time_mins: 8,
-    is_available: true,
-    stock_qty: 24,
-    description: "San Marzano tomatoes, fresh Puglia burrata, wild basil oil on 48h fermented sourdough crust.",
-    ingredients: ["San Marzano Tomatoes", "Handcrafted Dough", "Burrata"],
-    image_url: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=400&q=80",
-  },
-  {
-    id: "m4",
-    name: "Crispy Calamari Fritti",
+    name: "Galouti Kebab",
     category: "starters",
-    price: 950,
-    prep_time_mins: 6,
+    price: 650,
+    prep_time_mins: 7,
     is_available: true,
-    stock_qty: 30,
-    description: "Wild squid, citrus zest, spicy Calabrian chili aioli dip.",
-    ingredients: ["Squid", "Chili Aioli"],
+    stock_qty: 22,
+    description: "Lucknowi minced mutton patties, smoked clove and cardamom, melted ghee, sheermal.",
+    ingredients: ["Mutton", "Ghee", "Tandoor Masala"],
+    recommended_with: "m9",
     image_url: "https://images.unsplash.com/photo-1599487488170-d11ec9c172f0?auto=format&fit=crop&w=400&q=80",
   },
   {
-    id: "m5",
-    name: "Chianti Classico Riserva 2018",
-    category: "beverages",
-    price: 1200,
-    prep_time_mins: 2,
+    id: "m2",
+    name: "Paneer Tikka Shashlik",
+    category: "starters",
+    price: 520,
+    prep_time_mins: 8,
     is_available: true,
-    stock_qty: 40,
-    description: "Full-bodied Tuscan red wine with notes of dark cherry and subtle spice.",
-    ingredients: ["Wine"],
+    stock_qty: 26,
+    description: "Char-grilled paneer, bell peppers and onion in a yogurt-tandoori marinade.",
+    ingredients: ["Paneer", "Yogurt", "Tandoor Masala"],
+    recommended_with: "m9",
+  },
+  {
+    id: "m3",
+    name: "Tandoori Prawns",
+    category: "starters",
+    price: 780,
+    prep_time_mins: 9,
+    is_available: true,
+    stock_qty: 14,
+    description: "Jumbo prawns in saffron-ajoblancho marinade, fired in the clay tandoor.",
+    ingredients: ["Prawns", "Saffron", "Yogurt"],
+  },
+  {
+    id: "m4",
+    name: "Butter Chicken",
+    category: "mains",
+    price: 720,
+    prep_time_mins: 12,
+    is_available: true,
+    stock_qty: 20,
+    description: "Tandoor-charred chicken in a silky tomato, cashew and fenugreek gravy.",
+    ingredients: ["Mutton", "Fresh Cream", "Tandoor Masala"],
+    recommended_with: "m11",
+  },
+  {
+    id: "m5",
+    name: "Hyderabadi Dum Biryani",
+    category: "mains",
+    price: 690,
+    prep_time_mins: 18,
+    is_available: true,
+    stock_qty: 16,
+    description: "Long-grain basmati layered with marinated mutton, saffron and fried onion, sealed and dum-cooked.",
+    ingredients: ["Basmati Rice", "Mutton", "Saffron"],
+    recommended_with: "m12",
+    image_url: "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=400&q=80",
   },
   {
     id: "m6",
-    name: "Tiramisu al Pistacchio",
+    name: "Dal Bukhara",
+    category: "mains",
+    price: 480,
+    prep_time_mins: 10,
+    is_available: true,
+    stock_qty: 30,
+    description: "Whole black urad lentils simmered overnight with tomato, butter and cream.",
+    ingredients: ["Fresh Cream", "Tandoor Masala"],
+  },
+  {
+    id: "m7",
+    name: "Rogan Josh",
+    category: "mains",
+    price: 820,
+    prep_time_mins: 15,
+    is_available: true,
+    stock_qty: 12,
+    description: "Kashmiri mutton curry, Kashmiri chilli and fennel, deep red oil, slow-cooked.",
+    ingredients: ["Mutton", "Tandoor Masala"],
+  },
+  {
+    id: "m8",
+    name: "Malai Kofta",
+    category: "mains",
+    price: 560,
+    prep_time_mins: 11,
+    is_available: true,
+    stock_qty: 18,
+    description: "Paneer and potato dumplings in a mellow cashew-saffron curry.",
+    ingredients: ["Paneer", "Fresh Cream", "Saffron"],
+  },
+  {
+    id: "m9",
+    name: "Gulab Jamun",
     category: "desserts",
-    price: 750,
+    price: 290,
+    prep_time_mins: 5,
+    is_available: true,
+    stock_qty: 28,
+    description: "Khoya dumplings, cardamom-rose syrup, warm, served with rabri.",
+    ingredients: ["Fresh Cream"],
+  },
+  {
+    id: "m10",
+    name: "Phirni",
+    category: "desserts",
+    price: 240,
     prep_time_mins: 4,
     is_available: true,
-    stock_qty: 15,
-    description: "Pistachio cream, Bronte pistachio crunch, espresso-soaked ladyfingers.",
-    ingredients: ["Pistachio Cream", "Espresso", "Mascarpone"],
+    stock_qty: 24,
+    description: "Ground-rice pudding, saffron and pistachio, set cold in earthen kulhad.",
+    ingredients: ["Saffron", "Fresh Cream"],
+  },
+  {
+    id: "m11",
+    name: "Masala Chai",
+    category: "beverages",
+    price: 120,
+    prep_time_mins: 3,
+    is_available: true,
+    stock_qty: 50,
+    description: "Assam tea, crushed cardamom, ginger, simmered with milk.",
+    ingredients: ["Yogurt"],
+  },
+  {
+    id: "m12",
+    name: "Salted Lassi",
+    category: "beverages",
+    price: 150,
+    prep_time_mins: 2,
+    is_available: true,
+    stock_qty: 45,
+    description: "Chilled yogurt drink, roasted cumin, a pinch of black salt.",
+    ingredients: ["Yogurt"],
   },
 ];
 
 const INITIAL_INVENTORY: InventoryItem[] = [
-  { id: "i1", name: "A5 Wagyu Beef", current_stock: 4.5, min_threshold: 3.0, unit: "kg", unit_cost: 4500, est_runout_mins: 95, potential_loss: 8200 },
-  { id: "i2", name: "Aged Truffle Cheese", current_stock: 0.8, min_threshold: 1.5, unit: "kg", unit_cost: 3200, est_runout_mins: 38, potential_loss: 4800 },
-  { id: "i3", name: "San Marzano Tomatoes", current_stock: 12.0, min_threshold: 5.0, unit: "kg", unit_cost: 450, est_runout_mins: 240, potential_loss: 1800 },
-  { id: "i4", name: "Handcrafted Sourdough", current_stock: 18.0, min_threshold: 8.0, unit: "pcs", unit_cost: 120, est_runout_mins: 180, potential_loss: 2400 },
+  { id: "i1", name: "Mutton", current_stock: 4.2, min_threshold: 3.0, unit: "kg", unit_cost: 850, est_runout_mins: 95, potential_loss: 8200 },
+  { id: "i2", name: "Paneer", current_stock: 0.9, min_threshold: 1.5, unit: "kg", unit_cost: 420, est_runout_mins: 38, potential_loss: 4800 },
+  { id: "i3", name: "Basmati Rice", current_stock: 12.0, min_threshold: 5.0, unit: "kg", unit_cost: 140, est_runout_mins: 240, potential_loss: 1800 },
+  { id: "i4", name: "Fresh Cream", current_stock: 6.0, min_threshold: 4.0, unit: "L", unit_cost: 180, est_runout_mins: 180, potential_loss: 2400 },
+  { id: "i5", name: "Saffron", current_stock: 0.05, min_threshold: 0.08, unit: "kg", unit_cost: 240000, est_runout_mins: 64, potential_loss: 3200 },
+  { id: "i6", name: "Ghee", current_stock: 3.5, min_threshold: 2.0, unit: "kg", unit_cost: 620, est_runout_mins: 210, potential_loss: 1600 },
 ];
 
 const INITIAL_TICKETS: KitchenTicket[] = [
-  { id: "k1", order_id: "ord-101", dish_name: "A5 Wagyu Smoked Burger", qty: 3, table_numbers: [2, 5], status: "cooking", station: "Station A (Grill)", prep_priority: "batched", created_at: "18:42" },
-  { id: "k2", order_id: "ord-102", dish_name: "Black Truffle Tagliatelle", qty: 2, table_numbers: [2], status: "cooking", station: "Station B (Saute)", prep_priority: "high", created_at: "18:44" },
-  { id: "k3", order_id: "ord-103", dish_name: "Wood-Fired Burrata Pizza", qty: 1, table_numbers: [4], status: "ready", station: "Station C (Assembly)", prep_priority: "normal", created_at: "18:35" },
+  { id: "k1", order_id: "ord-101", dish_name: "Butter Chicken", qty: 3, table_numbers: [2, 5], status: "cooking", station: "Curry/Handi", prep_priority: "batched", created_at: "18:42" },
+  { id: "k2", order_id: "ord-102", dish_name: "Hyderabadi Dum Biryani", qty: 2, table_numbers: [2], status: "cooking", station: "Tawa/Biryani", prep_priority: "high", created_at: "18:44" },
+  { id: "k3", order_id: "ord-103", dish_name: "Galouti Kebab", qty: 1, table_numbers: [4], status: "ready", station: "Tandoor/Grill", prep_priority: "normal", created_at: "18:35" },
 ];
 
 const INITIAL_EVENTS: LiveEvent[] = [
-  { id: "e1", timestamp: "18:50 PM", type: "order", description: "Table 5 placed order for 2x A5 Wagyu Burger", severity: "info", table_number: 5 },
-  { id: "e2", timestamp: "18:48 PM", type: "ai", description: "PulseAI Governor batched 3 Wagyu Burger orders across Tables 2 & 5", severity: "success" },
-  { id: "e3", timestamp: "18:44 PM", type: "inventory", description: "Low Stock Alert: Aged Truffle Cheese reached threshold (0.8 kg remaining)", severity: "warning" },
-  { id: "e4", timestamp: "18:35 PM", type: "kitchen", description: "Station C completed Wood-Fired Burrata Pizza for Table 4", severity: "info", table_number: 4 },
+  { id: "e1", timestamp: "18:50 PM", type: "order", description: "Table 5 placed order for 2x Butter Chicken", severity: "info", table_number: 5 },
+  { id: "e2", timestamp: "18:48 PM", type: "ai", description: "PulseAI Governor batched 3 Butter Chicken orders across Tables 2 & 5", severity: "success" },
+  { id: "e3", timestamp: "18:44 PM", type: "inventory", description: "Low Stock Alert: Paneer reached threshold (0.9 kg remaining)", severity: "warning" },
+  { id: "e4", timestamp: "18:35 PM", type: "kitchen", description: "Tandoor/Grill completed Galouti Kebab for Table 4", severity: "info", table_number: 4 },
 ];
 
 const INITIAL_INSIGHTS: AIInsight[] = [
   {
     id: "ins-1",
     type: "bottleneck",
-    title: "Kitchen Station A Overload & Smart Burger Batching",
-    problem: "Station A (Grill) is experiencing a 14-minute prep delay due to concurrent burger requests.",
-    cause: "5 Wagyu Burger orders received across Tables 2 & 5 within a 6-minute window.",
-    recommendation: "Execute Smart CPU Batching on Station A: Cook all 5 Wagyu patties simultaneously and defer fry prep by 3 mins.",
+    title: "Curry/Handi Overload & Smart Butter Chicken Batching",
+    problem: "Curry/Handi is experiencing a 14-minute prep delay due to concurrent curry requests.",
+    cause: "5 Butter Chicken orders received across Tables 2 & 5 within a 6-minute window.",
+    recommendation: "Execute Smart CPU Batching on Curry/Handi: build one large gravy base and split across the 5 portions, defer naan to Tandoor/Grill by 3 mins.",
     business_impact: {
       wait_reduction_pct: 18,
       revenue_increase_val: 3400,
@@ -181,13 +249,13 @@ const INITIAL_INSIGHTS: AIInsight[] = [
     },
     confidence: 96,
     reasoning: [
-      "Station A Grill surface utilization reached 88%",
-      "Identical patty sear cycles permit simultaneous 5-unit batching",
-      "Reduces total station heat cycles from 4 to 1",
+      "Curry/Handi burner utilization reached 88%",
+      "Identical butter-chicken gravy cycles permit simultaneous 5-unit batching",
+      "Reduces total gravy reductions from 4 batches to 1",
     ],
     why_not: [
-      "Why not open Line 2 Grill? ➔ Only 2 pending patty orders exist; extra line cook cost (₹800/hr) exceeds wait savings.",
-      "Why not defer burgers? ➔ Table 5 guest expectation SLA is 12 mins.",
+      "Why not open a second Handi? ➔ Only 2 pending curry orders remain; extra line cook cost (₹800/hr) exceeds wait savings.",
+      "Why not defer the curries? ➔ Table 5 guest expectation SLA is 12 mins.",
     ],
     snapshot_version: "v182",
     generated_ago_sec: 2,
@@ -196,8 +264,8 @@ const INITIAL_INSIGHTS: AIInsight[] = [
 ];
 
 const INITIAL_MEMORY: AIMemoryItem[] = [
-  { id: "mem-1", timestamp: "18:30 PM", title: "Batched 4 Truffle Pasta Orders", action_taken: "Kitchen Station B Re-allocation", outcome_metric: "Table Wait Time", delta_pct: -16 },
-  { id: "mem-2", timestamp: "17:45 PM", title: "Promoted Chianti Pairing on Table 4", action_taken: "Smart Recommendation Engine", outcome_metric: "Average Check Size", delta_pct: +14 },
+  { id: "mem-1", timestamp: "18:30 PM", title: "Batched 4 Dal Bukhara Orders", action_taken: "Curry/Handi Re-allocation", outcome_metric: "Table Wait Time", delta_pct: -16 },
+  { id: "mem-2", timestamp: "17:45 PM", title: "Promoted Phirni Upsell on Table 4", action_taken: "Smart Recommendation Engine", outcome_metric: "Average Check Size", delta_pct: +14 },
 ];
 
 const INITIAL_STAFF: StaffMember[] = [
@@ -209,21 +277,23 @@ const INITIAL_STAFF: StaffMember[] = [
   { id: "s6", full_name: "Anita Joshi", email: "anita@pulseos.com", role: "floor_waiter", hourly_rate: 180, shift_status: "on_duty", performance_rating: 4.4, shift_start: "17:00" },
 ];
 
-/** Route a menu item to a kitchen station by category + name. Replaces the
- *  old "Burger -> Station A, everything else -> Station B" rule that piled
- *  pizza, calamari, tiramisu and wine all onto Station B and starved C. */
+/** Route an Indian menu item to a kitchen station by category + name.
+ *  Tandoor/Grill = kebabs, tandoori, grilled starters.
+ *  Tawa/Biryani = biryani and rice.
+ *  Curry/Handi = curries and slow-cooked mains.
+ *  Assembly/Desserts = desserts and beverages. */
 function stationFor(menu: MenuItem): KitchenTicket["station"] {
   const name = menu.name.toLowerCase();
-  if (menu.category === "mains" && (name.includes("burger") || name.includes("wagyu") || name.includes("beef"))) {
-    return "Station A (Grill)";
+  if (name.includes("biryani")) {
+    return "Tawa/Biryani";
   }
-  if (menu.category === "mains" && (name.includes("pizza") || name.includes("burrata"))) {
-    return "Station C (Assembly)";
+  if (name.includes("kebab") || name.includes("tandoori") || name.includes("tikka") || name.includes("prawns")) {
+    return "Tandoor/Grill";
   }
   if (menu.category === "desserts" || menu.category === "beverages") {
-    return "Station C (Assembly)";
+    return "Assembly/Desserts";
   }
-  return "Station B (Saute)";
+  return "Curry/Handi";
 }
 
 export const usePulseStore = create<PulseState>((set, get) => ({
